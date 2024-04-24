@@ -6,12 +6,19 @@ from random import shuffle
 from collections import deque
 from matplotlib import pyplot
 
-# ENDED: Numpy arrays giving a headache in logits conversion
+# ENDED: Finished monte carlo, need to see how training works for NN.
 # TODO: draw() player routes with separate colors
 # TODO: any empty variables in the game object must be set to none when not in use.
 # TODO: always update the current player object!!
 # TODO: verify that game translation to network input is valid
 # TODO: test network output to logit conversion!
+# TODO: getting logits for an action (is multiplying the best way?)
+# TODO: (self.turn - 1) % len(self.players) the way to get the right person to go from self.players?
+# TODO: reshuffle train cards when 
+# TODO: color counting for each player
+# TODO: in MCTS, do terminal states in the simulation have different things to backprop? consult AGZero paper
+# TODO: More specific logs? Terminal state logs and who caused the end of the game and such
+# TODO: Make sure the player who initiated the last turn actually gets a last turn
 
 """
 CLASSES
@@ -142,7 +149,17 @@ class Action:
                 self.takeDests = takeDests
     
     def __str__(self) -> str:
-        return f"{self.action}"
+        if self.action == 0:
+            return f"{self.route} using {self.colorsUsed}"
+        elif self.action == 1:
+            return f"{self.colorToDraw} (DRAW FACE UP)"
+        elif self.action == 2:
+            return f"(DRAW FACE DOWN)"
+        elif self.action == 3:
+            if self.askingForDeal:
+                return f"(ASK FOR DEST DEAL)"
+            else:
+                return f"{self.takeDests} (TAKE DESTS)"
 
 class Agent:
     """
@@ -187,6 +204,7 @@ class Game:
         self.turn = 1 - len(players)
         self.wildPicked: bool = False
         self.gameLogs: list[str] = []
+        self.discardPile: Deck = Deck([])
         self.trainCarDeck: Deck = trainCarDeck()
         self.destinationDeal: list[Destination] = None
         self.movePerforming: Action = Action(3, askingForDeal=True)
@@ -201,14 +219,14 @@ class Game:
         self.makingNextMove: Agent = self.players[0]
 
     def __str__(self) -> str:
-        info = f"Turn: {self.turn}\nPlayers: {len(self.players)}\nGame Over: {self.gameOver}\nFinal Turns: {self.lastTurn}\nDestinations Left: {self.destinationsDeck.count()}\nTrain Cards Left: {self.trainCarDeck.count()}\n{self.faceUpCards}\n--------------------------------------------------\n{self.makingNextMove}"
+        info = f"Turn: {self.turn}\nPlayers: {len(self.players)}\nGame Over: {self.gameOver}\nFinal Turns: {self.lastTurn}\nDestinations Left: {self.destinationsDeck.count()}\nTrain Cards Left: {self.trainCarDeck.count()}\n{self.faceUpCards}\n--------------------------------------------------\nNEXT TO GO: {self.makingNextMove}\n"
         return info
     
     def clone(self):
         """
         Creates a deep copy of the current Game
         """
-        new = Game(self.map, self.players, False, False)
+        new = Game(self.map, deepcopy(self.players), False, False)
         new.turn = deepcopy(self.turn)
         new.board = deepcopy(self.board)
         new.players = deepcopy(self.players)
@@ -226,6 +244,231 @@ class Game:
         new.destinationCards = deepcopy(self.destinationCards)
         new.destinationsDeck = deepcopy(self.destinationsDeck)
         return new
+    
+    def play(self, action: Action):
+        """
+        Takes the current game object and applies a given, valid game action to it
+        """
+        initLastTurn = None
+        if self.turn < 1:
+            assert action.action == 3, f"TURN {self.turn} Game starts by dealing destination cards, action given: '{action.action}' is invalid for this turn"
+            assert action.takeDests != None, f"TURN {self.turn} no destination card indexes (takeDests) specified for pickup"
+            destDeal: list[Destination] = self.destinationsDeck.draw(3)
+            for index in action.takeDests:
+                self.makingNextMove.destinationCards.append(destDeal[index])
+                self.makingNextMove.points -= destDeal[index].points
+            if len(destDeal) > 0: self.destinationsDeck.insert(destDeal)
+
+            # Logging
+            if self.doLogs: 
+                self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) picking {action.takeDests} from [{destDeal[0]}, {destDeal[1]}, {destDeal[2]}]\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                for dest in self.makingNextMove.destinationCards:
+                    self.gameLogs = self.gameLogs + [f"{dest}, "]
+                self.gameLogs = self.gameLogs + ["\n"]
+            
+            self.turn += 1
+            self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+            if self.turn == 1:
+                self.movePerforming = None
+        else:
+            # NO ACTION - GAME IS OVER
+            if action == None:
+                self.gameOver = True
+                self.endedGame = self.makingNextMove.turnOrder
+            # ROUTE PLACING LOGIC
+            elif action.action == 0:
+                
+                # See if the route is already taken, otherwise update game board to reflect new owner of route
+                isTaken: bool = None
+                placing = None
+                for path in self.board.get_edge_data(action.route.city1, action.route.city2).values():
+                    if path['owner'] == None: 
+                        isTaken = False
+                        placing = path
+                        path['owner'] = self.makingNextMove.turnOrder
+                        break
+                if isTaken == None: raise TypeError(f"TURN {self.turn} Placing route that is already owned by player {self.makingNextMove.turnOrder}")
+
+                # Find placement makeup of card colors
+                using = []
+                colorsGiven = 0
+                weight = placing['weight']
+                for color in action.colorsUsed:
+                    while color in self.makingNextMove.trainCards and colorsGiven < weight:
+                        self.makingNextMove.trainCards.remove(color)
+                        using.append(color)
+                        colorsGiven += 1
+                
+                # Update player information
+                self.makingNextMove.trainsLeft -= weight
+                self.makingNextMove.points += pointsByLength[weight]
+
+                # Logging
+                if self.doLogs: 
+                    self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) placing {action.route} using {using} action {action.colorsUsed}\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                    for dest in self.makingNextMove.destinationCards:
+                        self.gameLogs = self.gameLogs + [f"{dest}, "]
+                    self.gameLogs = self.gameLogs + ["\n"]
+
+                # Update game variables
+                self.discardPile.insert(using)
+                if self.makingNextMove.trainsLeft < 3:
+                    self.lastTurn = True
+                    self.endedGame = self.makingNextMove
+                    initLastTurn = True
+                self.turn += 1
+                self.movePerforming = None
+                self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+            # CARD PICKING LOGIC (FACE UP)
+            elif action.action == 1:
+                
+                if self.movePerforming == None:
+
+                    # Update game state
+                    self.faceUpCards.remove(action.colorToDraw)
+                    if self.trainCarDeck.count() > 0: 
+                        replacement = self.trainCarDeck.draw(1)
+                        self.faceUpCards.append(replacement[0])
+
+                    # Update player information
+                    self.makingNextMove.trainCards.append(action.colorToDraw)
+
+                    # Logging
+                    if self.doLogs: 
+                        self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) picked face up {action.colorToDraw}\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                        for dest in self.makingNextMove.destinationCards:
+                            self.gameLogs = self.gameLogs + [f"{dest}, "]
+                        self.gameLogs = self.gameLogs + ["\n"]
+
+                    # Update game variables
+                    if action.colorToDraw == 'WILD':
+                        self.turn += 1
+                        self.movePerforming = None
+                        self.colorPicked = None
+                        self.wildPicked = False
+                        self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+                    self.movePerforming = action
+                    self.colorPicked = action.colorToDraw
+                    self.wildPicked = False
+                
+                elif self.movePerforming.action == 1 or self.movePerforming.action == 2:
+                    assert action.colorToDraw != 'WILD', f"TURN {self.turn} Player {self.makingNextMove.turnOrder} {self.makingNextMove.name} tried to pick up a wild on the second draw"
+                    
+                    # Update game state
+                    self.faceUpCards.remove(action.colorToDraw)
+                    if self.trainCarDeck.count() > 0: 
+                        replacement = self.trainCarDeck.draw(1)
+                        self.faceUpCards.append(replacement[0])
+
+                    # Update player information
+                    self.makingNextMove.trainCards.append(action.colorToDraw)
+
+                    # Logging
+                    if self.doLogs: 
+                        self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) picked face up {action.colorToDraw}\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                        for dest in self.makingNextMove.destinationCards:
+                            self.gameLogs = self.gameLogs + [f"{dest}, "]
+                        self.gameLogs = self.gameLogs + ["\n"]
+
+                    # Update game variables
+                    self.turn += 1
+                    self.movePerforming = None
+                    self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+                    self.colorPicked = None
+                    self.wildPicked = False
+
+                else:
+                    raise TypeError(f"TURN {self.turn} Player {self.makingNextMove.turnOrder} {self.makingNextMove.name} tried to draw face up from invalid state")
+            # CARD PICKING LOGIC (FACE DOWN)
+            elif action.action == 2:
+                
+                if self.movePerforming == None:
+
+                    # Update game state
+                    drawn = self.trainCarDeck.draw(1)
+
+                    # Update player information
+                    self.makingNextMove.trainCards.append(drawn[0])
+
+                    # Logging
+                    if self.doLogs: 
+                        self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) picked face down {drawn[0]}\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                        for dest in self.makingNextMove.destinationCards:
+                            self.gameLogs = self.gameLogs + [f"{dest}, "]
+                        self.gameLogs = self.gameLogs + ["\n"]
+
+                    # Update game variables
+                    self.movePerforming = action
+                    self.colorPicked = drawn[0]
+
+                elif self.movePerforming.action == 1 or self.movePerforming.action == 2:
+                    assert self.wildPicked == False, f"TURN {self.turn} Player {self.makingNextMove.turnOrder} {self.makingNextMove.name} tried to pick from face down deck after picking WILD"
+
+                    # Update game state
+                    drawn = self.trainCarDeck.draw(1)
+
+                    # Update player information
+                    self.makingNextMove.trainCards.append(drawn[0])
+
+                    # Logging
+                    if self.doLogs: 
+                        self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) picked face down {drawn[0]}\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                        for dest in self.makingNextMove.destinationCards:
+                            self.gameLogs = self.gameLogs + [f"{dest}, "]
+                        self.gameLogs = self.gameLogs + ["\n"]
+
+                    # Update game variables
+                    self.turn += 1
+                    self.colorPicked = None
+                    self.wildPicked = False
+                    self.movePerforming = None
+                    self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+            # DESTINATION PICKING LOGIC
+            elif action.action == 3:
+                if action.askingForDeal == True:
+                    self.destinationDeal: list[Destination] = self.destinationsDeck.draw(3)
+                    self.movePerforming = action
+
+                    # Logging
+                    if self.doLogs: 
+                        self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) asked for destination deal: [{self.destinationDeal[0]}, {self.destinationDeal[1]}, {self.destinationDeal[2]}]\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                        for dest in self.makingNextMove.destinationCards:
+                            self.gameLogs = self.gameLogs + [f"{dest}, "]
+                        self.gameLogs = self.gameLogs + ["\n"]
+
+                else:
+                    # Update game state
+                    for index in range(0, 3):
+                        if index not in action.takeDests:
+                            notTaking = self.destinationDeal[index]
+                            self.destinationsDeck.insert([notTaking])
+                    
+                    # Update player information
+                    for index in action.takeDests:
+                        taking = self.destinationDeal[index]
+                        self.makingNextMove.destinationCards.append(taking)
+                        self.makingNextMove.points -= taking.points
+
+                    # Logging
+                    if self.doLogs: 
+                        self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) chose {action.takeDests}\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
+                        for dest in self.makingNextMove.destinationCards:
+                            self.gameLogs = self.gameLogs + [f"{dest}, "]
+                        self.gameLogs = self.gameLogs + ["\n"]
+
+                    # Update game variables
+                    self.turn += 1
+                    self.movePerforming = None
+                    self.destinationDeal = None
+                    self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+        
+        # Logging
+        if self.doLogs and self.gameOver == False:
+            self.gameLogs = self.gameLogs + [f"         Game train deck length = {self.trainCarDeck.count()}\n         Game dests deck length = {self.destinationsDeck.count()}\n\n"]
+
+        if self.lastTurn and self.endedGame.turnOrder == self.makingNextMove.turnOrder and initLastTurn == None:
+            self.gameOver = True
+            print(f"Game is over turn {self.turn} __ {self.endedGame.turnOrder} ended game and its currently {self.makingNextMove.turnOrder}?")
 
     def draw(self) -> None:
         """
@@ -234,8 +477,17 @@ class Game:
         pos = nx.spectral_layout(self.board)
         nx.draw_networkx_nodes(self.board, pos)
         nx.draw_networkx_labels(self.board, pos, font_size=6)
-        nx.draw_networkx_edges(self.board, pos)
+        for player in self.players:
+            edges = [edge for edge in self.board.edges(data=True) if edge[2]['owner'] == player.turnOrder]
+            nx.draw_networkx_edges(self.board, pos, edges, edge_color=graphColors[player.turnOrder], connectionstyle=f"arc3, rad = 0.{player.turnOrder}", arrows=True)
         pyplot.show()
+    
+    def log(self) -> None:
+        """
+        Logs the game in a log.txt (MAKE SURE LOGS ARE SET TO TRUE AT GAME OBJECT CREATION)
+        """
+        file = open("log.txt", "w")
+        file.writelines(self.gameLogs)
 
     def validMoves(self) -> list[Action]:
         """
@@ -248,11 +500,12 @@ class Game:
             if self.movePerforming == None:
                 numWilds: int = self.makingNextMove.trainCards.count("WILD")
                 for route in self.board.edges(data=True):
-
-                    if route[2]['owner'] != '': continue
+                    
+                    if route[2]['owner'] != None: continue
                     weight: int = int(route[2]['weight'])
                     color: str = route[2]['color']
                     routeType: Route = Route(route[0], route[1], route[2]['weight'], route[2]['color'], route[2]['index'])
+                    if self.makingNextMove.trainsLeft < weight: continue
                     
                     if color != "GRAY":
 
@@ -271,7 +524,7 @@ class Game:
                                 actionList.append(Action(0, routeType, ['WILD', color]))
                     else:
                         for color in color_indexing.keys():
-
+                            if color == "WILD": continue
                             numColor: int = self.makingNextMove.trainCards.count(color)
                             if numColor == 0: continue
                             elif numColor < weight:
@@ -288,7 +541,7 @@ class Game:
                                     actionList.append(Action(0, routeType, ['WILD', color]))
                         if numWilds >= weight:
                             actionList.append(Action(0, routeType, ['WILD']))
-                if len(self.faceUpCards) > 0:
+                if len(self.faceUpCards) > 1:
                     for card in self.faceUpCards:
                         actionList.append(Action(1, colorToDraw=card))
                 if self.trainCarDeck.count() > 0:
@@ -302,6 +555,7 @@ class Game:
                 if self.trainCarDeck.count() >= 1: actionList.append(Action(2))
             elif self.movePerforming.action == 2:
                 for card in self.faceUpCards:
+                    if card == "WILD": continue
                     actionList.append(Action(1, colorToDraw=card))
                 if self.trainCarDeck.count() >= 1: actionList.append(Action(2))
             elif self.movePerforming.action == 3:
@@ -311,7 +565,6 @@ class Game:
         if len(actionList) == 0:
             self.gameOver = True
             self.endedGame = self.makingNextMove.turnOrder
-            print("No valid moves found for this state. Setting game to over.")
         
         return actionList
 
@@ -323,7 +576,9 @@ class Node:
         self.visits: int = 0                    # N(s,a)
         self.totalWinProb: float = 0            # W(s,a)
         self.priorProb: float = priorProb       # P(s,a)
-        self.children: dict[Action, Node] = {}
+        self.children: dict[Action, Node] = {}  
+        self.toPlay: int = None
+        self.terminal = False
     
     def isExpanded(self) -> bool:
         """
@@ -398,3 +653,9 @@ VARIABLES
 
 color_indexing: dict[str, int] = {'PINK': 0, 'WHITE': 1, 'BLUE': 2, 'YELLOW': 3, 'ORANGE': 4, 'BLACK': 5, 'RED': 6, 'GREEN': 7, 'WILD': 8}
 """A dictionary that maps string names to their index values (standardization)"""
+
+pointsByLength: dict[int, int] = {1:1, 2:2, 3:4, 4:7, 5:10, 6:15}
+"""A dictionary that maps route length to the points gained for placing it"""
+
+graphColors: dict[int, str] = {0: 'blue', 1: 'red', 2: 'green', 3: 'yellow'}
+"""A dictionary that maps a player turn order to the color denoting their routes on the graph drawn at the end of the game"""

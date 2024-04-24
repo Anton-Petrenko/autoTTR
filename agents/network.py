@@ -18,14 +18,15 @@ class NetworkOutput:
         assert Dr.size == 100, "Network 'Dr' output is not of length 100"
         assert w.size == 1, "Network 'w' output is not of length 1"
 
-        self.a: ndarray = a
+        self.a: ndarray = a[0]
         """The networks desired action to take, represented as a list of 4 probabilities"""
-        self.Dc: ndarray = Dc
+        self.Dc: ndarray = Dc[0]
         """The networks desired colors, represented as a list of 9 (indexed by standard index mapping)"""
-        self.Dd: ndarray = Dd
+        self.Dd: ndarray = Dd[0]
         """The networks desired destination cards, represented as a list of 3 (one spot for each route to pick up by index)"""
-        self.Dr: ndarray = Dr
+        self.Dr: ndarray = Dr[0]
         """The networks desired routes to place, represented as a list of 100 (indexed as in the metadata for each Route)"""
+        self.w: ndarray = w[0]
 
 class Network(Agent):
     """
@@ -121,6 +122,6 @@ class Network(Agent):
         
         inputArray = destAvail + destsHeld + destCount + routesTaken + colorAvail + colorCount
         input = np.array(inputArray).reshape((1, 511))
-        outputs = self.model.predict(input)
+        outputs = self.model.predict(input, verbose=0)
 
         return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
