@@ -1,8 +1,9 @@
 import math
 import numpy
+import keras
 from random import choices
 from agents.network import Network, NetworkOutput
-from internal.types import Game, Agent, Node, Action, color_indexing
+from internal.types import Game, Agent, Node, Action, Destination, Route, color_indexing
 
 class Training:
     """
@@ -18,57 +19,86 @@ class Training:
                  rootExploreFraction: float = 0.25,
                  pb_cBase: float = 19652,
                  pb_cInit: float = 1.25,
-                 numSamplingMoves: int = 10
+                 numSamplingMoves: int = 10,
+                 momentum: float = 0.9,
+                 learningRate: float = 0.001,
+                 weightDecay: float = 0.0001
                  ) -> None:
         """
         Initialize the training, with adjustable parameters. Creates a brand new game with four players.
         """
-        self.buffer: list[Game] = []
+        self.map = map
+        self.players = players
         self.network: Network = network
-        self.simulations = simulationsPerState
-        self.gameSimulations = gameSimulations
-        self.networks: dict[float, Network] = {}
-        self.game: Game = Game(map, players, True, False)
+        self.baseGame = Game(map, players, False, False)
+        self.game: Game = self.baseGame.clone()
+        self.gameSimulations: int = gameSimulations
+        self.mctsSimulations: int = simulationsPerState
+        self.gameHistory: list[tuple[Game, Action]] = []
         assert type(network) == Network, "Can only train network"
 
         # Exploration noise
         self.rootDirichletAlpha = rootDirichletAlpha
         self.rootExploreFraction = rootExploreFraction
 
-        # UCB Formula
+        # UCB formula
         self.pb_cBase = pb_cBase
         self.pb_cInit = pb_cInit
 
-        self.numSamplingMoves = numSamplingMoves
-    
+        # Training
+        self.momentum = momentum
+        self.weightDecay = weightDecay
+        self.learningRate = learningRate
+        self.optimizer = keras.optimizers.SGD(learning_rate=self.learningRate, momentum=self.momentum)
+
     def train(self):
-
-        # 1. Self-Play Data Generation
-        for _ in range(self.gameSimulations):
-            # Do training for a specified number of game simulations - gets network from shared storage
-            pass
-
-        # 2. Network Training
-        pass
-
-    def playGame(self):
         """
-        Tell the network to play a single game of Ticket to Ride
+        This function will perform the training of the neural network.
+
+        NOTE: In the AlphaGoZero paper, training and self-play is done in parallel. However, this function takes care of both,
+        meaning it is done sequentially.
+        """
+
+        """
+        STEP 1: SELF-PLAY
+        Play a number of games through in their entirety, we will be training the network on these games.
+        The number of games to train on is decided by variable self.gameSimulations.
+        For each state in the game, we do MCTS searches until we hit unexplored states in our tree.
+        The number of times we simulate MCTS from the given state is determined by variable self.mctsSimulations
+        """
+        for _ in range(self.gameSimulations):       # Create bucket of games to train on
+            self.playGame()                         # Play a full game
+            self.game = self.baseGame.clone()       # Reset the global game variable
+            for game, action in self.gameHistory:   # For each state in the played game, train the network
+                self.network.learn(game, action, self.optimizer, self.weightDecay)
+
+        """
+        STEP 2: TRAINING
+        With the games to train on having been generated, train the network
+        """
+
+
+
+    def playGame(self) -> None:
+        """
+        Play one full game of Ticket to Ride, simulating MCTS for each state. Sets self.game to the resulting game.
         """
         while self.game.gameOver == False:
             action, root = self.mcts()
+            self.gameHistory.append((self.game.clone(), action))
             self.game.play(action)
-        self.game.log()
+            self.storeSearchStats(root)
     
     def mcts(self) -> tuple[Action, Node]:
         """
-        The MCTS function called for every state played in the original game simulation. It returns a tuple of the (final action decided, root state)
+        The MCTS function called for every state played in the original game simulation. 
+        It returns a tuple of the (final action decided, root state)
         """
         root = Node(0)
         self.evaluate(root, self.game)
         self.addNoise(root)
 
-        for _ in range(self.simulations):
+        for _ in range(self.mctsSimulations):
 
             node: Node = root
             path: list[Node] = []

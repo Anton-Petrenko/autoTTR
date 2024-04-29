@@ -2,7 +2,7 @@ import keras
 import numpy as np
 from numpy import ndarray
 import tensorflow as tf
-from internal.types import Agent, Game, getDestinationCards, getRoutes, color_indexing
+from internal.types import Agent, Game, Action, getDestinationCards, getRoutes, color_indexing
 
 class NetworkOutput:
     """
@@ -74,9 +74,9 @@ class Network(Agent):
     def __str__(self) -> None:
         self.model.summary()
 
-    def think(self, game: Game) -> NetworkOutput:
+    def stateToInput(self, game: Game) -> ndarray:
         """
-        Pass the current (cloned) state through the neural network and get output from all output heads
+        Given a game state, creates an input array with the required shape for input to the neural network.
         """
         # 1. Available Destinations
         destAvail = [0]*len(getDestinationCards(game.map))
@@ -122,6 +122,22 @@ class Network(Agent):
         
         inputArray = destAvail + destsHeld + destCount + routesTaken + colorAvail + colorCount
         input = np.array(inputArray).reshape((1, 511))
-        outputs = self.model.predict(input, verbose=0)
 
+        return input
+
+    def think(self, game: Game) -> NetworkOutput:
+        """
+        Pass a game state through the network. Player to move is relevant player for the network.
+        """
+        input = self.stateToInput(game)
+        outputs = self.model.predict(input, verbose=0)
         return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
+
+    def learn(self, game: Game, action: Action, optimizer: keras.optimizers.SGD, weightDecay: float) -> None:
+        """
+        Perform a weight update for the network given a game state and the action (serving as a label). 
+        Includes the keras optimizer and a weight decay as well.
+        """
+        networkInput = self.stateToInput(game)
+        aLabel = [1 if x == action.action else 0 for x in range(4)]
+        DcLabel = []

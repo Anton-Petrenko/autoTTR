@@ -76,6 +76,8 @@ class Game(object):
   def __init__(self, history=None):
     self.history = history or []
     self.child_visits = []
+    # an array where, for each move in the game, an array containing a value for each possible action in any state of go is stored, where
+    # each action is given a softmax value based on the number of times that move was visited in the mcts tree from that move.
     self.num_actions = 362  # action space size for chess; 11259 for shogi, 362 for Go
 
   def terminal(self):
@@ -97,11 +99,13 @@ class Game(object):
     self.history.append(action)
 
   def store_search_statistics(self, root):
-    sum_visits = sum(child.visit_count for child in root.children.itervalues())
+    sum_visits = sum(child.visit_count for child in root.children.itervalues()) # how many times a child was visited from this node
     self.child_visits.append([
         root.children[a].visit_count / sum_visits if a in root.children else 0
         for a in range(self.num_actions)
     ])
+    # add a list to the self object list, where for each possible action in any game of go, if the action is part of the children of the...
+    # ... root node, set the value in the list to the visit count / sum_visits, otherwise it was never visited, and the value should be set to 0
 
   def make_image(self, state_index: int):
     # Game specific feature planes.
@@ -110,6 +114,7 @@ class Game(object):
   def make_target(self, state_index: int):
     return (self.terminal_value(state_index % 2),
             self.child_visits[state_index])
+  
 
   def to_play(self):
     return len(self.history) % 2
@@ -129,13 +134,18 @@ class ReplayBuffer(object):
 
   def sample_batch(self):
     # Sample uniformly across positions.
-    move_sum = float(sum(len(g.history) for g in self.buffer))
+    # self.buffer is a list of completed games that have been played by the network and simulated in each move by MCTS (max size 100000 games)
+    move_sum = float(sum(len(g.history) for g in self.buffer)) # get total number of moves throughout the whole sample to train on
     games = numpy.random.choice(
         self.buffer,
         size=self.batch_size,
-        p=[len(g.history) / move_sum for g in self.buffer])
-    game_pos = [(g, numpy.random.randint(len(g.history))) for g in games]
-    return [(g.make_image(i), g.make_target(i)) for (g, i) in game_pos]
+        p=[len(g.history) / move_sum for g in self.buffer]) # select, from the 100000 games played, 4096 (self.batch_size)...
+        # ...will be chosen from the sample of games with probabilities assigned to each game. each game is assigned a probability
+        # of (moves played in this game / total moves between all games)
+    game_pos = [(g, numpy.random.randint(len(g.history))) for g in games] # take the sample and create a tuple for each game...
+    # ... where the tuple is (game, random integer representing a position in the game history) and put all tuples in a list
+    return [(g.make_image(i), g.make_target(i)) for (g, i) in game_pos] # return a list of tuples where each tuple is the...
+    # ... (input for the network, tuple 2) where tuple 2 is actually just the labels for all heads of the network
 
 
 class Network(object):

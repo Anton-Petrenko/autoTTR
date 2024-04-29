@@ -6,7 +6,7 @@ from random import shuffle
 from collections import deque
 from matplotlib import pyplot
 
-# ENDED: Finished monte carlo, need to see how training works for NN.
+# ENDED: Creating labels for the neural network in network.py
 # TODO: draw() player routes with separate colors
 # TODO: any empty variables in the game object must be set to none when not in use.
 # TODO: always update the current player object!!
@@ -19,6 +19,9 @@ from matplotlib import pyplot
 # TODO: in MCTS, do terminal states in the simulation have different things to backprop? consult AGZero paper
 # TODO: More specific logs? Terminal state logs and who caused the end of the game and such
 # TODO: Make sure the player who initiated the last turn actually gets a last turn
+# TODO: Learning rate schedule - how should it be adjusted for this implementation? (training.py)
+# TODO: Do typecasting and object creating for the bucket in training.py
+# TODO: Test gameWinner() function
 
 """
 CLASSES
@@ -195,6 +198,7 @@ class Game:
         Initialize a game of Ticket to Ride that is ready to play.
         """
         self.map: str = map
+        self.moves: int = 0
         self.doLogs: bool = logs
         self.drawGame: bool = draw
         self.gameOver: bool = False
@@ -228,6 +232,7 @@ class Game:
         """
         new = Game(self.map, deepcopy(self.players), False, False)
         new.turn = deepcopy(self.turn)
+        new.moves = deepcopy(self.moves)
         new.board = deepcopy(self.board)
         new.players = deepcopy(self.players)
         new.gameLogs = deepcopy(self.gameLogs)
@@ -249,6 +254,7 @@ class Game:
         """
         Takes the current game object and applies a given, valid game action to it
         """
+        self.moves += 1
         initLastTurn = None
         if self.turn < 1:
             assert action.action == 3, f"TURN {self.turn} Game starts by dealing destination cards, action given: '{action.action}' is invalid for this turn"
@@ -567,6 +573,12 @@ class Game:
             self.endedGame = self.makingNextMove.turnOrder
         
         return actionList
+    
+    def getWinner(self) -> Agent:
+        """
+        Returns the current leading player of the game
+        """
+        return self.players[max([player.turnOrder for player in self.players])]
 
 class Node:
     """
