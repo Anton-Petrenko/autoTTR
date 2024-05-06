@@ -32,9 +32,12 @@ class Network(Agent):
     """
     The neural network implementation for the AI agent.
     """
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, desireSteps: float = 0.05) -> None:
         """Initializes the neural network architecture"""
         super().__init__(name)
+
+        # Extra Parameter
+        self.desireSteps = desireSteps
 
         # Top half
         inputLayer = keras.layers.Input(shape=(511,))
@@ -133,11 +136,36 @@ class Network(Agent):
         outputs = self.model.predict(input, verbose=0)
         return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
 
-    def learn(self, game: Game, action: Action, optimizer: keras.optimizers.SGD, weightDecay: float) -> None:
+    def learn(self, game: Game, action: Action, winner: Agent, optimizer: keras.optimizers.SGD, weightDecay: float) -> None:
         """
         Perform a weight update for the network given a game state and the action (serving as a label). 
         Includes the keras optimizer and a weight decay as well.
         """
         networkInput = self.stateToInput(game)
+
         aLabel = [1 if x == action.action else 0 for x in range(4)]
-        DcLabel = []
+
+        DcLabel = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        if action.colorToDraw != None:
+            DcLabel[color_indexing[action.colorToDraw]] = 1
+        if action.colorsUsed != None:
+            factor = 1
+            for color in action.colorsUsed:
+                DcLabel[color_indexing[color]] = factor
+                factor -= self.desireSteps
+        
+        DdLabel = [0, 0, 0]
+        if action.takeDests != None:
+            for index in action.takeDests:
+                DdLabel[index] = 1
+        
+        DrLabel = [0] * 100
+        if action.route != None: DrLabel[action.route.index] = 1
+
+        wLabel = [1 if game.makingNextMove.turnOrder == winner.turnOrder else 0]
+
+        loss = 0
+        output = self.think(game)
+        loss += (keras.losses.mean_squared_error(output.w, wLabel) + tf.nn.softmax_cross_entropy_with_logits())
+
+        

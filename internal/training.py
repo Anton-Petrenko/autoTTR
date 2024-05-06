@@ -49,6 +49,7 @@ class Training:
         self.momentum = momentum
         self.weightDecay = weightDecay
         self.learningRate = learningRate
+        self.numSamplingMoves = numSamplingMoves
         self.optimizer = keras.optimizers.SGD(learning_rate=self.learningRate, momentum=self.momentum)
 
     def train(self):
@@ -68,9 +69,10 @@ class Training:
         """
         for _ in range(self.gameSimulations):       # Create bucket of games to train on
             self.playGame()                         # Play a full game
-            self.game = self.baseGame.clone()       # Reset the global game variable
+            winner = self.game.getWinner()          # Store the winner of the game
             for game, action in self.gameHistory:   # For each state in the played game, train the network
-                self.network.learn(game, action, self.optimizer, self.weightDecay)
+                self.network.learn(game, action, winner, self.optimizer, self.weightDecay)
+            self.game = self.baseGame.clone()       # Reset the global game variable
 
         """
         STEP 2: TRAINING
