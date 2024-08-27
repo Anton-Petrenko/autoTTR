@@ -53,7 +53,7 @@ class Deck:
     
     def shuffle(self) -> None:
         """
-        Shuffle the deck
+        Shuffle the deck in place
         """
         assert len(self.cards) > 0, "Can't shuffle an empty deck"
         reShuffled = shuffle(list(self.cards))
@@ -63,7 +63,7 @@ class Deck:
         """
         Draw a number of cards from the deck
         """
-        assert len(self.cards) > 0, "Can't draw from an empty deck."
+        assert len(self.cards) >= number, f"Attempted to draw {number} cards from a deck of {len(self.cards)} cards"
         cardsDrawn: list = []
         for _ in range(number):
             cardsDrawn.append(self.cards.pop())
@@ -71,7 +71,7 @@ class Deck:
     
     def insert(self, cards: list) -> None:
         """
-        Place cards into the back of the deck (input parameter must be list) (no typechecking)
+        Place the list of cards into the back of the deck
         """
         assert type(cards) == list, "When inserting cards into Deck, cards must be in a list."
         for card in cards:
@@ -109,21 +109,21 @@ class Route:
                  color: str,
                  index: int
                  ) -> None:
+        """
+        Create a Route object (index denotes unique value for Route)
+        """
         self.city1: str = city1
         self.city2: str = city2
         self.weight: int = weight
         self.color: str = color
         self.index: int = index
-        """
-        Create a Route object (index denotes constant value for Route)
-        """
     
     def __str__(self) -> str:
         return f"({self.index}) {self.city1} --{self.weight}-- {self.city2} ({self.color})"
 
 class Action:
     """
-    The object representing an action to take/taken in the game
+    The object representing an action (to) take/taken in the game
     """
     def __init__(self, action: int, route: Route = None, colorsUsed: list[str] = None, colorToDraw: str = None, askingForDeal: bool = None, takeDests: list[int] = None) -> None:
         """
