@@ -3,7 +3,7 @@ import numpy
 import keras
 from random import choices
 from agents.network import Network, NetworkOutput
-from internal.types import Game, Agent, Node, Action, Destination, Route, color_indexing
+from internal.type import Game, Agent, Node, Action, Destination, Route, color_indexing
 
 class Training:
     """

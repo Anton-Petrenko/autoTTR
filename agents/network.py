@@ -2,7 +2,7 @@ import keras
 import numpy as np
 from numpy import ndarray
 import tensorflow as tf
-from internal.types import Agent, Game, Action, getDestinationCards, getRoutes, color_indexing
+from internal.type import Agent, Game, Action, getDestinationCards, getRoutes, color_indexing
 
 class NetworkOutput:
     """

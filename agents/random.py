@@ -1,4 +1,4 @@
-from internal.types import Agent
+from internal.type import Agent
 
 class Random(Agent):
     """

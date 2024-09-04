@@ -1,10 +1,7 @@
-import re
-import sys
-import networkx as nx
-from copy import deepcopy
-from random import shuffle
-from collections import deque
-from matplotlib import pyplot
+'''
+types.py
+-----------
+This file is meant to serve as a types file for typecasting the objects used in this project
 
 # ENDED: Creating labels for the neural network in network.py
 # TODO: draw() player routes with separate colors
@@ -22,12 +19,22 @@ from matplotlib import pyplot
 # TODO: Learning rate schedule - how should it be adjusted for this implementation? (training.py)
 # TODO: Do typecasting and object creating for the bucket in training.py
 # TODO: Test gameWinner() function
+# TODO: There are duplicate variables at the end of type.py and data.py, check why and where they are used and delete
+
+'''
+
+import re
+import sys
+import networkx as nx
+from copy import deepcopy
+from random import shuffle
+from collections import deque
+from matplotlib import pyplot
 
 """
 CLASSES
 --------------------------------------------
 """
-
 class Deck:
     """
     The object to represent a deck of cards in Ticket to Ride
@@ -36,6 +43,7 @@ class Deck:
         """
         Create a new, shuffled deck of cards from a list of items (no typecast for items within)
         """
+        assert len(items) > 0, "Can't create an empty deck of cards"
         shuffle(items)
         self.cards = deque(items)
 
@@ -55,13 +63,14 @@ class Deck:
         """
         Shuffle the deck in place
         """
-        assert len(self.cards) > 0, "Can't shuffle an empty deck"
+        if len(self.cards) == 0:
+            return
         reShuffled = shuffle(list(self.cards))
         self.cards = deque(reShuffled)
     
     def draw(self, number: int) -> list:
         """
-        Draw a number of cards from the deck
+        Draw a specific number of cards from the deck
         """
         assert len(self.cards) >= number, f"Attempted to draw {number} cards from a deck of {len(self.cards)} cards"
         cardsDrawn: list = []
@@ -93,7 +102,9 @@ class Destination:
         self.city1: str = city1
         self.city2: str = city2
         self.points: int = points
+        '''The number of points a destination card is worth'''
         self.index: int = index
+        '''The unique key to represent a card as an integer'''
     
     def __str__(self) -> str:
         return f"({self.index}) {self.city1} --{self.points}-- {self.city2}"
@@ -115,8 +126,11 @@ class Route:
         self.city1: str = city1
         self.city2: str = city2
         self.weight: int = weight
+        '''The number of train car cards it takes to claim this route'''
         self.color: str = color
+        '''The color of this route'''
         self.index: int = index
+        '''The unique key to represent this route as an integer'''
     
     def __str__(self) -> str:
         return f"({self.index}) {self.city1} --{self.weight}-- {self.city2} ({self.color})"
@@ -127,10 +141,17 @@ class Action:
     """
     def __init__(self, action: int, route: Route = None, colorsUsed: list[str] = None, colorToDraw: str = None, askingForDeal: bool = None, takeDests: list[int] = None) -> None:
         """
-        Create an action object (0 - Place Route, 1 - Draw Face Up, 2 - Draw Face Down, 3 - Draw Destination Card)
-
-        On initialization, relevant parameters must be supplied depending on which action is being described.
+        Create an action object\n
+        @parameters\n
+        action = 0 [PLACE ROUTE]\n
+            needs route and needs colorsUsed\n
+        action = 1 [DRAW FACE UP]\n
+            needs colorToDraw\n
+        action = 2 [DRAW FACE DOWN]\n
+        action = 3 [DRAW DESTINATIONS]\n
+            needs askingForDeal or needs takeDests
         """
+        assert 0 <= action <= 3, "Action object: actions must be labeled 0-3, invalid integer given"
         self.action = action
         if self.action == 0:
             assert route != None, "Action object: route placement but route object not given"
@@ -256,15 +277,24 @@ class Game:
         """
         self.moves += 1
         initLastTurn = None
+
+        # First Deal Pre-Game Logic
         if self.turn < 1:
+            # Assertions
             assert action.action == 3, f"TURN {self.turn} Game starts by dealing destination cards, action given: '{action.action}' is invalid for this turn"
             assert action.takeDests != None, f"TURN {self.turn} no destination card indexes (takeDests) specified for pickup"
+
+            # Engine Code
             destDeal: list[Destination] = self.destinationsDeck.draw(3)
             for index in action.takeDests:
                 self.makingNextMove.destinationCards.append(destDeal[index])
                 self.makingNextMove.points -= destDeal[index].points
             if len(destDeal) > 0: self.destinationsDeck.insert(destDeal)
-
+            self.turn += 1
+            self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
+            if self.turn == 1:
+                self.movePerforming = None
+            
             # Logging
             if self.doLogs: 
                 self.gameLogs = self.gameLogs + [f"TURN {self.turn} || PLAYER {self.makingNextMove.turnOrder} ({self.makingNextMove.name}) picking {action.takeDests} from [{destDeal[0]}, {destDeal[1]}, {destDeal[2]}]\n", f"         Points: {self.makingNextMove.points}\n", f"         Trains Left: {self.makingNextMove.trainsLeft}\n", f"         Colors Held: {self.makingNextMove.trainCards}\n", "         Dests Held: "]
@@ -272,10 +302,6 @@ class Game:
                     self.gameLogs = self.gameLogs + [f"{dest}, "]
                 self.gameLogs = self.gameLogs + ["\n"]
             
-            self.turn += 1
-            self.makingNextMove = self.players[(self.turn - 1) % len(self.players)]
-            if self.turn == 1:
-                self.movePerforming = None
         else:
             # NO ACTION - GAME IS OVER
             if action == None:

@@ -1,17 +1,7 @@
-'''
-PROJECT STATUS
-
- - look through all code and do completeness script
-    - types.py
-    - data.py
-    - training.py
-
-'''
-
 import random
 from agents.network import Network
 from internal.training import Training
-from internal.types import Agent, Game
+from internal.type import Agent, Game
 
 training = Training("USA", [Agent("Spongebob"), Agent("Patrick"), Agent("Sandy"), Agent("Squidward")], Network("AutoTTR"), simulations=1)
 training.train()
