@@ -1,10 +1,20 @@
+'''
+PROJECT STATUS
+
+ - look through all code and do completeness script
+    - types.py
+    - data.py
+    - training.py
+
+'''
+
 import random
 from agents.network import Network
 from internal.training import Training
 from internal.types import Agent, Game
 
-# training = Training("USA", [Agent("Spongebob"), Agent("Patrick"), Agent("Sandy"), Agent("Squidward")], Network("AutoTTR"), simulations=1)
-# training.train()
+training = Training("USA", [Agent("Spongebob"), Agent("Patrick"), Agent("Sandy"), Agent("Squidward")], Network("AutoTTR"), simulations=1)
+training.train()
 
 # Testing game move engine
 # game = Game("USA", [Agent("Spongebob"), Agent("Patrick"), Agent("Sandy"), Agent("Squidward")], True, False)
