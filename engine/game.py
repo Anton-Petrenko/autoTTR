@@ -10,6 +10,7 @@ import matplotlib.pyplot
 from copy import deepcopy
 from itertools import combinations
 from engine.objects import Deck, Action, Player, Destination, Route, color_indexing, pointsByLength, graphColors
+import numpy as np
 
 class Game:
     '''
@@ -22,7 +23,9 @@ class Game:
 
         # Game variables
         self.turn = 0
+        self.states = []
         self.map: str = map
+        self.copy: bool = copy
         self.noValidMovesInARow = 0
         self.lastRoundTurn: int = 0
         self.lastRound: bool = False
@@ -34,7 +37,6 @@ class Game:
         self.totalActionsTaken: int = 0
         self.reshuffleLimit = reshuffleLimit
         self.visualizeGame: bool = visualize
-        self.gameWinner: Player | None = None
         self.lastAction: Action | None = None
         self.finalStandings: list[Player] = []
         self.currentAction: Action | None = None
@@ -50,6 +52,9 @@ class Game:
         self.board: nx.MultiGraph = self.makeBoard(self.map, len(players)) if not copy else None
         self.destinationCards: list[Destination] = self.makeDestinationCards(map) if not copy else []
         self.destinationsDeck: Deck[Destination] = Deck(self.destinationCards) if not copy else Deck([])
+        if not copy:
+            for i, player in enumerate(self.players):
+                player.turnOrder = i
 
         # Save init state
         self.init_trainCarDeck: Deck | None = self.trainCarDeck if not copy else None
@@ -71,7 +76,7 @@ class Game:
     def clone(self):
         """Creates an entirely new copy of the current game"""
         playersNew = deepcopy(self.players)
-        new = Game(playersNew, self.map, False, False, True)
+        new = Game(playersNew, self.map, False, False, True, self.reshuffleLimit)
         new.turn = deepcopy(self.turn)
         new.lastRound = deepcopy(self.lastRound)
         new.firstRound = deepcopy(self.firstRound)
@@ -80,7 +85,6 @@ class Game:
         new.gameLogs = deepcopy(self.gameLogs) if self.recordLogs else []
         new.totalActionsTaken = deepcopy(self.totalActionsTaken)
         new.visualizeGame = False
-        new.gameWinner = deepcopy(self.gameWinner)
         new.lastAction = deepcopy(self.lastAction)
         new.currentAction = deepcopy(self.currentAction)
         new.causedLastTurn = deepcopy(self.causedLastTurn)
@@ -285,12 +289,13 @@ class Game:
         if self.recordLogs and not self.lastAction:
                 self.gameLogs = self.gameLogs + [f"-------------------- TURN {self.turn} --------------------\n{self}\n{self.players[self.turn % len(self.players)]}\n\n"]
 
+        if not self.copy:
+            self.states.append(self.stateToInput())
+
         if self.firstRound:
             assert action.action == 3, f"TURN {self.turn} Game starts by dealing destination cards, action given: '{action.action}' is invalid for this turn"
             assert action.takeDests != None, f"TURN {self.turn} no destination card indexes (takeDests) specified for pickup"
             assert len(self.destinationCardsDealt) >= len(action.takeDests), f"TURN {self.turn} wanted to take cards {action.takeDests} in deal {self.destinationCardsDealt}"
-
-            self.players[self.turn % len(self.players)].turnOrder = self.turn
 
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + [f"> dealt [{self.destinationCardsDealt[0]}, {self.destinationCardsDealt[1]}, {self.destinationCardsDealt[2]}]\n> taking {action.takeDests}\n"]
@@ -320,6 +325,7 @@ class Game:
             self.turn += 1
 
         elif action == None:
+            self.log()
             raise TypeError("Action of value None was given to play")  
         elif action.action == 0:
             self.placeRoute(action.route.city1, action.route.city2, action.colorsUsed)
@@ -544,6 +550,7 @@ class Game:
             return max(result)
 
     def endGame(self) -> None:
+
         self.gameIsOver = True
         longestRouteValue = None
         longestRoutePlayer = []
@@ -584,14 +591,88 @@ class Game:
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + [f"\n{self.players[playerIndex].name} gets the longest route!\n\n"]
 
+        winners = sorted([player for player in self.players], key=lambda p: p.points, reverse=True)
+        if winners[0].points == winners[1].points:
+            if winners[1].gotLongestRoute:
+                self.finalStandings.append(winners[1])
+                self.finalStandings.append(winners[0])
+                self.finalStandings = self.finalStandings + winners[2:]
+            else:
+                self.finalStandings = winners
+        else:
+            self.finalStandings = winners
+
         if self.recordLogs:
             self.log()
 
-    def inChildVisits(self, action: Action):
-        """
-        A function used to see if an action is currently in the childVisits dictionary
-        """
+    def stateToInput(self) -> np.ndarray:
+        '''
+        Given a game object, converts it to a neural network friendly input of length 511
 
+        1. Available Destinations [30] - every destination possible is given an index and value, value 
+        a 1 if it is available to pick up and a 0 if it is not
+
+        2. Destinations held by player [30] - same as #1 but for which destinations the player is holding
+
+        3. Destinations by opponent [3] - array of length 4 to count the raw number of destinations picked
+        up by each player where the current player = index 0, next player is index 1... etc
+
+        4. Routes taken by player [400] - An array of length 400, 100 spaces for each player. Each index
+        corresponds to one route and contains a value 1 if the player has taken that route and 0 if not
+
+        5. Available colors [9] - An index for each color available to have as a card. The value corresponds
+        to how many of that color is currently showing up on the board available to take
+
+        6. Color counting [39] - 9 color spaces for each player, where the first nine is the next player to go,
+        the next nine is the next... and so on. Value is 1 for that index if that player has that color. +3 for an unknown slot for opponents but not next player to go
+        
+        Returns an ndarray of shape (1, 511) which represents the current game state
+        '''
+
+        # Generate a list of the order of the next turns in the game before looping back (helper)
+        numPlayers = len(self.players)
+        playerOrderIndexes = [self.turn % numPlayers]
+        for _ in range(numPlayers-1):
+            playerOrderIndexes.append((playerOrderIndexes[len(playerOrderIndexes)-1] + 1) % numPlayers)
+
+        destAvail = [0] * 30
+        if self.destinationCardsDealt:
+            for destination in self.destinationCardsDealt:
+                destAvail[destination.id] = 1
+        
+        destHeld = [0] * 30
+        for destination in self.players[playerOrderIndexes[0]].destinationCardHand:
+            destHeld[destination.id] = 1
+
+        x = 0
+        destCount = [0] * 3
+        for turnOrder in playerOrderIndexes[1:]:
+            destCount[x] = len(self.players[turnOrder].destinationCardHand)
+            x += 1
+        
+        x = 0
+        routesTaken = []
+        for turnOrder in playerOrderIndexes:
+            taken = [0] * 100
+            edges = [edge for edge in self.board.edges(data=True) if edge[2]['owner'] == turnOrder]
+            for edge in edges:
+                taken[edge[2]['index']] = 1
+            routesTaken += taken
+        while len(routesTaken) != 400:
+            routesTaken.append(0)
+        
+        colorAvail = [self.faceUpCards.count(color) for color in color_indexing.keys()]
+
+        colorCount = [self.players[playerOrderIndexes[0]].trainCardHand.count(color) for color in color_indexing.keys()]
+        for turnOrder in playerOrderIndexes[1:]:
+            colorCount += self.players[playerOrderIndexes[0]].colorCounts[turnOrder]
+        
+        inputArray = destAvail + destHeld + destCount + routesTaken + colorAvail + colorCount
+        assert len(inputArray) == 511
+        
+        input = np.array(inputArray).reshape((1, 511))
+
+        return input
 
     def draw(self) -> None:
         pos = nx.spectral_layout(self.board)
@@ -604,15 +685,7 @@ class Game:
         matplotlib.pyplot.show()
 
     def log(self, path: str = "log.txt") -> None:
-        winners = sorted([player for player in self.players], key=lambda p: p.points, reverse=True)
-        if winners[0].points == winners[1].points:
-            if winners[1].gotLongestRoute:
-                self.finalStandings.append(winners[1])
-                self.finalStandings.append(winners[0])
-                self.finalStandings = self.finalStandings + winners[2:]
-            else:
-                self.finalStandings.append(winners[0])
-        for player in winners:
+        for player in self.finalStandings:
             self.gameLogs = self.gameLogs + [f"{player.name}: {player.points}\n"]
         file = open(path, "w")
         file.writelines(self.gameLogs)

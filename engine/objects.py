@@ -233,3 +233,4 @@ pointsByLength: dict[int, int] = {1:1, 2:2, 3:4, 4:7, 5:10, 6:15}
 
 graphColors: dict[int, str] = {0: 'blue', 1: 'red', 2: 'green', 3: 'yellow'}
 """A dictionary that maps a player turn order to the color denoting their routes on the graph drawn at the end of the game"""
+

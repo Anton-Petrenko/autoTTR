@@ -33,6 +33,9 @@ class NetworkOutput:
         """The networks desired routes to place, represented as a list of 100 (indexed as in the metadata for each Route)"""
         self.w: np.ndarray = w[0]
         """The chance of winning for the next player to take the turn in the game"""
+    
+    def __str__(self):
+        return f"a: {self.a}\nDc: {self.Dc}\nDd: {self.Dd}\nDr: {self.Dr}\nw: {self.w}"
 
 class AutoTTR:
     '''
@@ -87,73 +90,13 @@ class AutoTTR:
         '''
         Passing in a game, the network will evaluate the state and calculate its output
         '''
-        input = self.stateToInput(game)
+        input = game.stateToInput()
         outputs = self.model.predict(input, verbose=False)
         return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
-
-    def stateToInput(self, game: Game) -> np.ndarray:
-        '''
-        Given a game object, converts it to a neural network friendly input of length 511
-
-        1. Available Destinations [30] - every destination possible is given an index and value, value 
-        a 1 if it is available to pick up and a 0 if it is not
-
-        2. Destinations held by player [30] - same as #1 but for which destinations the player is holding
-
-        3. Destinations by opponent [3] - array of length 4 to count the raw number of destinations picked
-        up by each player where the current player = index 0, next player is index 1... etc
-
-        4. Routes taken by player [400] - An array of length 400, 100 spaces for each player. Each index
-        corresponds to one route and contains a value 1 if the player has taken that route and 0 if not
-
-        5. Available colors [9] - An index for each color available to have as a card. The value corresponds
-        to how many of that color is currently showing up on the board available to take
-
-        6. Color counting [39] - 9 color spaces for each player, where the first nine is the next player to go,
-        the next nine is the next... and so on. Value is 1 for that index if that player has that color. +3 for an unknown slot for opponents but not next player to go
-        '''
-
-        # Generate a list of the order of the next turns in the game before looping back (helper)
-        numPlayers = len(game.players)
-        playerOrderIndexes = [game.turn % numPlayers]
-        for _ in range(numPlayers-1):
-            playerOrderIndexes.append((playerOrderIndexes[len(playerOrderIndexes)-1] + 1) % numPlayers)
-
-        destAvail = [0] * 30
-        for destination in game.destinationsDeck.cards:
-            destAvail[destination.id] = 1
-        
-        destHeld = [0] * 30
-        for destination in game.players[playerOrderIndexes[0]].destinationCardHand:
-            destHeld[destination.id] = 1
-
-        x = 0
-        destCount = [0] * 3
-        for turnOrder in playerOrderIndexes[1:]:
-            destCount[x] = len(game.players[turnOrder].destinationCardHand)
-            x += 1
-        
-        x = 0
-        routesTaken = []
-        for turnOrder in playerOrderIndexes:
-            taken = [0] * 100
-            edges = [edge for edge in game.board.edges(data=True) if edge[2]['owner'] == turnOrder]
-            for edge in edges:
-                taken[edge[2]['index']] = 1
-            routesTaken += taken
-        while len(routesTaken) != 400:
-            routesTaken.append(0)
-        
-        colorAvail = [game.faceUpCards.count(color) for color in color_indexing.keys()]
-
-        colorCount = [game.players[playerOrderIndexes[0]].trainCardHand.count(color) for color in color_indexing.keys()]
-        for turnOrder in playerOrderIndexes[1:]:
-            colorCount += game.players[playerOrderIndexes[0]].colorCounts[turnOrder]
-        
-        inputArray = destAvail + destHeld + destCount + routesTaken + colorAvail + colorCount
-        input = np.array(inputArray).reshape((1, 511))
- 
-        return input
+    
+    def thinkRaw(self, raw) -> NetworkOutput:
+        outputs = self.model.predict(raw, verbose=False)
+        return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
     
     def save(self):
         self.model.save(f"saved/model{self.saves}.keras")

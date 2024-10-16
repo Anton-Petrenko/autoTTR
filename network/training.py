@@ -7,6 +7,7 @@ The file at top-level that will train the network, MCTS
 import math
 from numpy import random as nprand
 from numpy import ndarray
+import numpy as np
 from keras import optimizers, losses
 from tensorflow import nn
 import tensorflow as tf
@@ -20,12 +21,82 @@ class Datapoint:
     An object to represent one datapoint that includes the network input and labels for all output heads
     """
     def __init__(self, game: Game, index: int):
-        self.inputState = 0
-        self.label_a = 0
-        self.label_Dc = 0
-        self.label_Dd = 0
-        self.label_Dr = 0
-        self.label_w = 0
+        self.inputState = game.states[index]
+        self.label_a = np.array(self.getLabel_a(game, index)).reshape((1, 4))
+        self.label_Dc = np.array(self.getLabel_Dc(game, index)).reshape((1, 9))
+        self.label_Dd = np.array(self.getLabel_Dd(game, index)).reshape((1, 3))
+        self.label_Dr = np.array(self.getLabel_Dr(game, index)).reshape((1, 100))
+        self.label_w = np.array(self.getLabel_w(game, index)).reshape((1, 1))
+
+    def __str__(self):
+        return f"a: {self.label_a}\nDc: {self.label_Dc}\nDd: {self.label_Dd}\nDr: {self.label_Dr}\nw: {self.label_w}"
+    
+    def getLabel_w(self, game: Game, index: int) -> int:
+        """
+        Returns if the player taking the action at the index of the game given is the player that won the game.
+        
+        Returns 0 if lost, 1 if won
+        """
+        if index < 4:
+            return [0.0] if game.finalStandings[0].turnOrder != game.turn % len(game.players) else [1.0]
+        
+        destsHeld = game.states[index][0][30:60]
+
+        for dests in game.finalStandings[0].destinationCardHand:
+            if destsHeld[dests.id] == 1:
+                return [1.0]
+        
+        return [0.0]
+    
+    def getLabel_Dr(self, game: Game, index: int) -> list[int]:
+        """
+        Returns a list, indexed by route ID's from the game, that reflects the action given by the parameters
+        """
+        Dr = [0.0]*100
+
+        if game.history[index].action != 0:
+            return Dr
+        
+        Dr[game.history[index].route.id] = 1.0
+
+        return Dr
+    
+    def getLabel_Dd(self, game: Game, index: int) -> list[int]:
+        """
+        Returns a list of desired routes to take where the index of the number is whether to take that index of the deal
+        """
+        Dd = [0.0]*3
+
+        if game.history[index].action != 3:
+            return Dd
+        if game.history[index].askingForDeal == True:
+            return Dd
+        
+        for i in game.history[index].takeDests:
+            Dd[i] = 1.0
+        
+        return Dd
+    
+    def getLabel_Dc(self, game: Game, index: int) -> list[int]:
+        """
+        Returns a list of probabilities for each color to take by color_index
+        """
+        if game.history[index].action == 0:
+            Dc = [1.0]*9
+            for i, color in enumerate(game.history[index].colorsUsed):
+                Dc[color_indexing[color]] = 0 + (i * 0.05)
+        elif game.history[index].action == 1:
+            Dc = [0.0]*9
+            Dc[color_indexing[game.history[index].colorToDraw]] = 1.0
+        return Dc
+
+    def getLabel_a(self, game: Game, index: int) -> list[int]:
+        """
+        The label for probabilities of which move to make (int)
+        """
+        a = [0.0]*4
+        a[game.history[index].action] = 1.0
+        return a
 
 class Node:
     """
@@ -130,6 +201,14 @@ class NetworkTrainer:
                 self.saveGame(game)
             
             batch = self.sampleBatch() # Create data to train on
+            self.updateWeights(batch)
+    
+    def updateWeights(self, batch: list[Datapoint]):
+        loss = 0
+        for data in batch:
+            networkOut = self.network.thinkRaw(data.inputState)
+            test = losses.MeanSquaredError()
+            test2 = test.call(data.label_a, networkOut.a)
 
     def sampleBatch(self) -> list[Datapoint]:
         totalMoves = sum([len(game.history) for game in self.gamesPlayed])
@@ -159,15 +238,15 @@ class NetworkTrainer:
         game = Game(players, logs=True)
 
         while not game.gameIsOver:
+            print(game.turn)
             action, root = self.mcts(game)
             game.play(action)
             self.storeSearchStats(game, root)
-        game.log()
         return game
 
     def storeSearchStats(self, game: Game, root: Node) -> None:
         totalVisits = sum([child.visits for child in root.children.values()])
-        childVisits = {action: root.children[action].visits / totalVisits for action in root.children.keys()}
+        game.childVisits.append({action: root.children[action].visits / totalVisits for action in root.children.keys()})
 
     def mcts(self, game: Game) -> tuple[Action, Node]:
         
