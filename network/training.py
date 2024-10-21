@@ -207,8 +207,9 @@ class NetworkTrainer:
         loss = 0
         for data in batch:
             networkOut = self.network.thinkRaw(data.inputState)
-            test = losses.MeanSquaredError()
-            test2 = test.call(data.label_a, networkOut.a)
+            lossMSE = losses.MeanSquaredError()
+            loss += lossMSE.call(data.label_w, networkOut.w)
+            
 
     def sampleBatch(self) -> list[Datapoint]:
         totalMoves = sum([len(game.history) for game in self.gamesPlayed])
