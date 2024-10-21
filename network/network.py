@@ -4,7 +4,7 @@ network.py
 The code for the autoTTR network
 '''
 
-from keras import layers, activations, Model, optimizers
+import keras
 from engine.game import Game
 from engine.objects import color_indexing
 import numpy as np
@@ -45,36 +45,37 @@ class AutoTTR:
 
         self.saves: int = 0
 
-        # Top half
-        inputLayer = layers.Input(shape=(511,))
-        lstm = layers.Dense(200, name="brain", activation="relu")(inputLayer)
+        # Residual Tower
+        inputLayer = keras.Input(shape=(511,))
+        resTower_1 = keras.layers.Conv1D(256, 1)(inputLayer)
+        #lstm = keras.layers.Dense(200, name="brain", activation="relu")(inputLayer)
 
-        # Output Heads
-        a_Out = layers.Dense(30, name="action30", activation="relu")(lstm)
-        a_Out = layers.Dense(10, name="action10", activation="relu")(a_Out)
-        a_Out = layers.Dense(4, name="action", activation=None)(a_Out)
-        a_Out = layers.Activation('softmax')(a_Out)
+        # Output Heads // do not use softmax for outputs in the model arch (see updateWeights in training.py)
+        a_Out = keras.layers.Dense(30, name="action30", activation="relu")(resTower_1)
+        a_Out = keras.layers.Dense(10, name="action10", activation="relu")(a_Out)
+        a_Out = keras.layers.Dense(4, name="action", activation=None)(a_Out)
+        #a_Out = layers.Activation('softmax')(a_Out)
 
-        Dc_Out = layers.Dense(30, name="colordesire30", activation="relu")(lstm)
-        Dc_Out = layers.Dense(9, name="colordesire", activation="relu")(Dc_Out)
-        Dc_Out = layers.Activation('softmax')(Dc_Out)
+        Dc_Out = keras.layers.Dense(30, name="colordesire30", activation="relu")(resTower_1)
+        Dc_Out = keras.layers.Dense(9, name="colordesire", activation="relu")(Dc_Out)
+        #Dc_Out = layers.Activation('softmax')(Dc_Out)
 
-        Dd_Out = layers.Dense(30, name="destinationdesire30", activation="relu")(lstm)
-        Dd_Out = layers.Dense(15, name="destinationdesire30_2", activation="relu")(Dd_Out)
-        Dd_Out = layers.Dense(3, name="destinationdesire", activation="relu")(Dd_Out)
-        Dd_Out = layers.Activation('softmax')(Dd_Out)
+        Dd_Out = keras.layers.Dense(30, name="destinationdesire30", activation="relu")(resTower_1)
+        Dd_Out = keras.layers.Dense(15, name="destinationdesire30_2", activation="relu")(Dd_Out)
+        Dd_Out = keras.layers.Dense(3, name="destinationdesire", activation="relu")(Dd_Out)
+        #Dd_Out = layers.Activation('softmax')(Dd_Out)
 
-        Dr_Out = layers.Dense(30, name="routedesire30", activation="relu")(lstm)
-        Dr_Out = layers.Dense(65, name="routedesire65", activation="relu")(Dr_Out)
-        Dr_Out = layers.Dense(100, name="routedesire", activation="relu")(Dr_Out)
-        Dr_Out = layers.Activation('softmax')(Dr_Out)
+        Dr_Out = keras.layers.Dense(30, name="routedesire30", activation="relu")(resTower_1)
+        Dr_Out = keras.layers.Dense(65, name="routedesire65", activation="relu")(Dr_Out)
+        Dr_Out = keras.layers.Dense(100, name="routedesire", activation="relu")(Dr_Out)
+        #Dr_Out = layers.Activation('softmax')(Dr_Out)
 
-        w = layers.Dense(30, name="winprob30", activation="relu")(lstm)
-        w = layers.Dense(15, name="winprob15", activation="relu")(w)
-        w = layers.Dense(1, name="winprob", activation="relu")(w)
-        w = layers.Activation(activations.sigmoid)(w)
+        w = keras.layers.Dense(30, name="winprob30", activation="relu")(resTower_1)
+        w = keras.layers.Dense(15, name="winprob15", activation="relu")(w)
+        w = keras.layers.Dense(1, name="winprob", activation="relu")(w)
+        w = keras.layers.Activation(keras.activations.sigmoid)(w)
 
-        self.model = Model(inputs=inputLayer, outputs=[a_Out, Dc_Out, Dd_Out, Dr_Out, w])
+        self.model = keras.Model(inputs=inputLayer, outputs=[a_Out, Dc_Out, Dd_Out, Dr_Out, w])
 
         # test the model input/output
         # input= np.random.rand(1, 511)
@@ -92,6 +93,7 @@ class AutoTTR:
         '''
         input = game.stateToInput()
         outputs = self.model.predict(input, verbose=False)
+        print(outputs)
         return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
     
     def thinkRaw(self, raw) -> NetworkOutput:

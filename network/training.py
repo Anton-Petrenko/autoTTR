@@ -9,7 +9,7 @@ from numpy import random as nprand
 from numpy import ndarray
 import numpy as np
 from keras import optimizers, losses
-from tensorflow import nn
+from tensorflow import nn, stop_gradient
 import tensorflow as tf
 from engine.game import Game
 from engine.objects import Player, Action, color_indexing, actionsAreEqual
@@ -209,7 +209,6 @@ class NetworkTrainer:
             networkOut = self.network.thinkRaw(data.inputState)
             lossMSE = losses.MeanSquaredError()
             loss += lossMSE.call(data.label_w, networkOut.w)
-            
 
     def sampleBatch(self) -> list[Datapoint]:
         totalMoves = sum([len(game.history) for game in self.gamesPlayed])

@@ -5,6 +5,7 @@ All scripting should be done here
 '''
 
 # TODO: configure default players list when intializing the game object
+# TODO: colorCounts
 # TODO: can a terminal state in Ticket to Ride be determined by how many moves have been made? ex. chess is 512
 # TODO: Verify network.stateToInput
 # TODO: make sure lastAction in game object is only for sequential moves by the same player. (not literally the last move made)
