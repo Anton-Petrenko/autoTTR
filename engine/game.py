@@ -670,7 +670,7 @@ class Game:
         inputArray = destAvail + destHeld + destCount + routesTaken + colorAvail + colorCount
         assert len(inputArray) == 511
         
-        input = np.array(inputArray).reshape((1, 511))
+        input = np.array(inputArray).reshape((1, 1, 511))
 
         return input
 

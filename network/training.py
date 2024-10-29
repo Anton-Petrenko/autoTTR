@@ -22,11 +22,11 @@ class Datapoint:
     """
     def __init__(self, game: Game, index: int):
         self.inputState = game.states[index]
-        self.label_a = np.array(self.getLabel_a(game, index)).reshape((1, 4))
-        self.label_Dc = np.array(self.getLabel_Dc(game, index)).reshape((1, 9))
-        self.label_Dd = np.array(self.getLabel_Dd(game, index)).reshape((1, 3))
-        self.label_Dr = np.array(self.getLabel_Dr(game, index)).reshape((1, 100))
-        self.label_w = np.array(self.getLabel_w(game, index)).reshape((1, 1))
+        self.label_a = np.array(self.getLabel_a(game, index))
+        self.label_Dc = np.array(self.getLabel_Dc(game, index))
+        self.label_Dd = np.array(self.getLabel_Dd(game, index))
+        self.label_Dr = np.array(self.getLabel_Dr(game, index))
+        self.label_w = np.array(self.getLabel_w(game, index))
 
     def __str__(self):
         return f"a: {self.label_a}\nDc: {self.label_Dc}\nDd: {self.label_Dd}\nDr: {self.label_Dr}\nw: {self.label_w}"
@@ -40,7 +40,7 @@ class Datapoint:
         if index < 4:
             return [0.0] if game.finalStandings[0].turnOrder != game.turn % len(game.players) else [1.0]
         
-        destsHeld = game.states[index][0][30:60]
+        destsHeld = game.states[index][0][0][30:60]
 
         for dests in game.finalStandings[0].destinationCardHand:
             if destsHeld[dests.id] == 1:
@@ -201,14 +201,27 @@ class NetworkTrainer:
                 self.saveGame(game)
             
             batch = self.sampleBatch() # Create data to train on
-            self.updateWeights(batch)
+            #self.updateWeights(batch)
     
+    def autoTTRLoss(true, pred):
+        pass
+
     def updateWeights(self, batch: list[Datapoint]):
         loss = 0
         for data in batch:
             networkOut = self.network.thinkRaw(data.inputState)
             lossMSE = losses.MeanSquaredError()
+            lossBCE = losses.BinaryCrossentropy()
             loss += lossMSE.call(data.label_w, networkOut.w)
+            loss += lossBCE.call(data.label_a, networkOut.a)
+            loss += lossBCE.call(data.label_Dr, networkOut.Dr)
+            loss += lossBCE.call(data.label_Dd, networkOut.Dd)
+            loss += nn.softmax_cross_entropy_with_logits(data.label_Dc, networkOut.Dc)
+        
+        for weights in self.network.model.get_weights():
+            loss += self.weightDecay * nn.l2_loss(weights)
+        
+        #self.network.model.compile(self.optimizer)
 
     def sampleBatch(self) -> list[Datapoint]:
         totalMoves = sum([len(game.history) for game in self.gamesPlayed])
@@ -238,8 +251,8 @@ class NetworkTrainer:
         game = Game(players, logs=True)
 
         while not game.gameIsOver:
-            print(game.turn)
             action, root = self.mcts(game)
+            print(game.turn)
             game.play(action)
             self.storeSearchStats(game, root)
         return game
@@ -281,6 +294,9 @@ class NetworkTrainer:
             for tup in visitCounts:
                 if tup[0] > vc:
                     action = tup[1]
+        if action == None:
+            print("Check selectAction!! printing visitCounts...")
+            print(visitCounts)
         return action
     
     def softmaxSample(self, counts: list[tuple[int, Action]]) -> Action:

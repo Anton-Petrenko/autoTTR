@@ -46,34 +46,51 @@ class AutoTTR:
         self.saves: int = 0
 
         # Residual Tower
-        inputLayer = keras.Input(shape=(511,))
+        inputLayer = keras.Input((1, 511,))
         resTower_1 = keras.layers.Conv1D(256, 1)(inputLayer)
-        #lstm = keras.layers.Dense(200, name="brain", activation="relu")(inputLayer)
+        resTower_2 = keras.layers.BatchNormalization()(resTower_1)
+        resTower_3 = keras.layers.ReLU()(resTower_2)
+
+        resBlock_1 = keras.layers.Conv1D(256, 1)(resTower_3)
+        resBlock_2 = keras.layers.BatchNormalization()(resBlock_1)
+        resBlock_3 = keras.layers.ReLU()(resBlock_2)
+        resBlock_4 = keras.layers.Conv1D(256, 1)(resBlock_3)
+        resBlock_5 = keras.layers.BatchNormalization()(resBlock_4)
+        resBlock_6 = keras.layers.Add()([resTower_3, resBlock_5])
+        resBlock_7 = keras.layers.ReLU()(resBlock_6)
 
         # Output Heads // do not use softmax for outputs in the model arch (see updateWeights in training.py)
-        a_Out = keras.layers.Dense(30, name="action30", activation="relu")(resTower_1)
-        a_Out = keras.layers.Dense(10, name="action10", activation="relu")(a_Out)
-        a_Out = keras.layers.Dense(4, name="action", activation=None)(a_Out)
+        a_Out = keras.layers.Conv1D(2, 1)(resBlock_7)
+        a_Out = keras.layers.BatchNormalization()(a_Out)
+        a_Out = keras.layers.ReLU()(a_Out)
+        a_Out = keras.layers.Dense(4, name="action", activation="softmax")(a_Out)
         #a_Out = layers.Activation('softmax')(a_Out)
 
-        Dc_Out = keras.layers.Dense(30, name="colordesire30", activation="relu")(resTower_1)
-        Dc_Out = keras.layers.Dense(9, name="colordesire", activation="relu")(Dc_Out)
+        Dc_Out = keras.layers.Conv1D(2, 1)(resBlock_7)
+        Dc_Out = keras.layers.BatchNormalization()(Dc_Out)
+        Dc_Out = keras.layers.ReLU()(Dc_Out)
+        Dc_Out = keras.layers.Dense(9, name="colordesire")(Dc_Out)
         #Dc_Out = layers.Activation('softmax')(Dc_Out)
 
-        Dd_Out = keras.layers.Dense(30, name="destinationdesire30", activation="relu")(resTower_1)
-        Dd_Out = keras.layers.Dense(15, name="destinationdesire30_2", activation="relu")(Dd_Out)
-        Dd_Out = keras.layers.Dense(3, name="destinationdesire", activation="relu")(Dd_Out)
+        Dd_Out = keras.layers.Conv1D(2, 1)(resBlock_7)
+        Dd_Out = keras.layers.BatchNormalization()(Dd_Out)
+        Dd_Out = keras.layers.ReLU()(Dd_Out)
+        Dd_Out = keras.layers.Dense(3, name="destinationdesire", activation="softmax")(Dd_Out)
         #Dd_Out = layers.Activation('softmax')(Dd_Out)
 
-        Dr_Out = keras.layers.Dense(30, name="routedesire30", activation="relu")(resTower_1)
-        Dr_Out = keras.layers.Dense(65, name="routedesire65", activation="relu")(Dr_Out)
-        Dr_Out = keras.layers.Dense(100, name="routedesire", activation="relu")(Dr_Out)
+        Dr_Out = keras.layers.Conv1D(2, 1)(resBlock_7)
+        Dr_Out = keras.layers.BatchNormalization()(Dr_Out)
+        Dr_Out = keras.layers.ReLU()(Dd_Out)
+        Dr_Out = keras.layers.Dense(100, name="routedesire", activation="softmax")(Dr_Out)
         #Dr_Out = layers.Activation('softmax')(Dr_Out)
 
-        w = keras.layers.Dense(30, name="winprob30", activation="relu")(resTower_1)
-        w = keras.layers.Dense(15, name="winprob15", activation="relu")(w)
-        w = keras.layers.Dense(1, name="winprob", activation="relu")(w)
-        w = keras.layers.Activation(keras.activations.sigmoid)(w)
+        w = keras.layers.Conv1D(1, 1)(resBlock_7)
+        w = keras.layers.BatchNormalization()(w)
+        w = keras.layers.ReLU()(w)
+        w = keras.layers.Dense(256)(w)
+        w = keras.layers.ReLU()(w)
+        w = keras.layers.Dense(1)(w)
+        w = keras.layers.Activation(keras.activations.tanh)(w)
 
         self.model = keras.Model(inputs=inputLayer, outputs=[a_Out, Dc_Out, Dd_Out, Dr_Out, w])
 
@@ -93,12 +110,11 @@ class AutoTTR:
         '''
         input = game.stateToInput()
         outputs = self.model.predict(input, verbose=False)
-        print(outputs)
-        return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
+        return NetworkOutput(outputs[0][0], outputs[1][0], outputs[2][0], outputs[3][0], outputs[4][0])
     
     def thinkRaw(self, raw) -> NetworkOutput:
         outputs = self.model.predict(raw, verbose=False)
-        return NetworkOutput(outputs[0], outputs[1], outputs[2], outputs[3], outputs[4])
+        return NetworkOutput(outputs[0][0], outputs[1][0], outputs[2][0], outputs[3][0], outputs[4][0])
     
     def save(self):
         self.model.save(f"saved/model{self.saves}.keras")
