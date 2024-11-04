@@ -8,7 +8,8 @@ import math
 from numpy import random as nprand
 from numpy import ndarray
 import numpy as np
-from keras import optimizers, losses
+from keras import optimizers
+import keras
 from tensorflow import nn, stop_gradient
 import tensorflow as tf
 from engine.game import Game
@@ -81,6 +82,7 @@ class Datapoint:
         """
         Returns a list of probabilities for each color to take by color_index
         """
+        Dc = [0.5]*9
         if game.history[index].action == 0:
             Dc = [1.0]*9
             for i, color in enumerate(game.history[index].colorsUsed):
@@ -137,24 +139,23 @@ class NetworkTrainer:
                  pb_cInit: float = 1.25, 
                  numSamplingMoves: int = 10, 
                  momentum: float = 0.9, 
-                 learningRate: float = 0.001, 
-                 weightDecay: float = 0.0001, 
+                 learningRate: float = 0.001,
                  windowSize: int = 100, 
                  networkSaveInterval: int = 1, 
                  trainingSteps: int = 1, 
-                 batchSize: int = 1) -> None:
+                 batchSize: int = 1,
+                 weightDecay: int = 0.0001) -> None:
         '''
         Set up the training object (default values used are from AlphaZero)
 
         NOTE: if numPlayers is None, it will train on games with random numbers of players on each simulation
         '''
-
         self.logs = logs
 
         # Network to train
         if self.logs:
             print("[NetworkTrainer] Creating a new model...")
-        self.network = AutoTTR()
+        self.network = AutoTTR(learningRate, momentum, weightDecay)
         """The latest network to use - in AlphaGoZero, this is fluid and done in parallel"""
         
         # Storage
@@ -179,12 +180,10 @@ class NetworkTrainer:
         # Training
         self.momentum = momentum
         self.batchSize = batchSize
-        self.weightDecay = weightDecay
         self.learningRate = learningRate
         self.trainingSteps = trainingSteps
         self.numSamplingMoves = numSamplingMoves
         self.networkSaveInterval = networkSaveInterval
-        self.optimizer = optimizers.SGD(self.learningRate, self.momentum)
     
     def run(self):
         """
@@ -193,35 +192,32 @@ class NetworkTrainer:
         NOTE: In the AlphaGoZero paper, training and self-play is done in parallel. However, this function takes care of both,
         meaning it is done sequentially.
         """
-
-        for i in range(1):
-
+        steps = 1
+        for i in range(self.trainingSteps):
+            
             for _ in range(self.gameSimsPerBatch):
                 game = self.playGame()
                 self.saveGame(game)
             
             batch = self.sampleBatch() # Create data to train on
-            #self.updateWeights(batch)
-    
-    def autoTTRLoss(true, pred):
-        pass
+            self.updateWeights(batch)
+
+            if steps == self.networkSaveInterval:
+                self.network.save()
+                steps = 1
+            else:
+                steps += 1
 
     def updateWeights(self, batch: list[Datapoint]):
-        loss = 0
         for data in batch:
-            networkOut = self.network.thinkRaw(data.inputState)
-            lossMSE = losses.MeanSquaredError()
-            lossBCE = losses.BinaryCrossentropy()
-            loss += lossMSE.call(data.label_w, networkOut.w)
-            loss += lossBCE.call(data.label_a, networkOut.a)
-            loss += lossBCE.call(data.label_Dr, networkOut.Dr)
-            loss += lossBCE.call(data.label_Dd, networkOut.Dd)
-            loss += nn.softmax_cross_entropy_with_logits(data.label_Dc, networkOut.Dc)
-        
-        for weights in self.network.model.get_weights():
-            loss += self.weightDecay * nn.l2_loss(weights)
-        
-        #self.network.model.compile(self.optimizer)
+            label = {
+                "action": data.label_a.reshape((1, 1, 4)),
+                "colordesire": data.label_Dc.reshape((1, 1, 9)),
+                "destinationdesire": data.label_Dd.reshape((1, 1, 3)),
+                "routedesire": data.label_Dr.reshape((1, 1, 100)),
+                "value": data.label_w
+            }
+            out = self.network.model.train_on_batch(data.inputState, label, return_dict=True)
 
     def sampleBatch(self) -> list[Datapoint]:
         totalMoves = sum([len(game.history) for game in self.gamesPlayed])
@@ -250,9 +246,9 @@ class NetworkTrainer:
 
         game = Game(players, logs=True)
 
+        print("simulating new game...")
         while not game.gameIsOver:
             action, root = self.mcts(game)
-            print(game.turn)
             game.play(action)
             self.storeSearchStats(game, root)
         return game
@@ -279,6 +275,7 @@ class NetworkTrainer:
             
             value = self.evaluate(node, gameClone)
             self.backpropagate(path, value, root, gameClone.players[gameClone.turn % len(gameClone.players)])
+
         return (self.selectAction(root, game), root)
     
     def selectAction(self, root: Node, game: Game) -> Action:
@@ -290,13 +287,11 @@ class NetworkTrainer:
         if game.totalActionsTaken < self.numSamplingMoves:
             action = self.softmaxSample(visitCounts)
         else:
-            vc = 0
+            vc = -1
             for tup in visitCounts:
                 if tup[0] > vc:
                     action = tup[1]
-        if action == None:
-            print("Check selectAction!! printing visitCounts...")
-            print(visitCounts)
+                    vc = tup[0]
         return action
     
     def softmaxSample(self, counts: list[tuple[int, Action]]) -> Action:
@@ -362,7 +357,6 @@ class NetworkTrainer:
         output = self.network.think(game)
         validMoves: list[Action] = game.getValidMoves()
         if len(validMoves) == 0:
-            node.terminal = True
             return output.w[0]
         policy = {action: math.exp(self.getLogitMove(output, action)) for action in validMoves}
         policySum = sum(policy.values())

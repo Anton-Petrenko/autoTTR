@@ -17,5 +17,5 @@ All scripting should be done here
 
 from network.training import NetworkTrainer
 from random import randint
-trainer = NetworkTrainer(numPlayers=4, logs=True)
+trainer = NetworkTrainer(numPlayers=4, logs=True, gameSimsPerBatch=2, batchSize=10, trainingSteps=10)
 trainer.run()
