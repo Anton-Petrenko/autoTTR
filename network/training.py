@@ -292,6 +292,7 @@ class NetworkTrainer:
                 if tup[0] > vc:
                     action = tup[1]
                     vc = tup[0]
+
         return action
     
     def softmaxSample(self, counts: list[tuple[int, Action]]) -> Action:
@@ -356,8 +357,12 @@ class NetworkTrainer:
         node.toPlay = game.turn % 4
         output = self.network.think(game)
         validMoves: list[Action] = game.getValidMoves()
-        if len(validMoves) == 0:
-            return output.w[0]
+        while len(validMoves) == 0:
+            print("hit the loop!")
+            if game.gameIsOver:
+                return output.w[0]
+            else:
+                validMoves = game.getValidMoves()
         policy = {action: math.exp(self.getLogitMove(output, action)) for action in validMoves}
         policySum = sum(policy.values())
         for action, value in policy.items():

@@ -14,6 +14,7 @@ All scripting should be done here
 # TODO: change checkFaceUp to checkDecks or something - discards may be populated with all other decks exhausted
 # NOTE: route checking for 2, 3 player games is done in placeRoute function in Game object
 # TODO: check backpropagation 1 - value for nodes that are not the current players nodes
+# NOTE !!: To play a move in the engine, you MUST call getValidMoves first and choose from those options. This function has state-altering code in it in certain circumstances
 
 from network.training import NetworkTrainer
 from random import randint
