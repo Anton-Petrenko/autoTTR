@@ -5,7 +5,7 @@ The code for the autoTTR network
 '''
 
 import keras
-from engine.game import Game
+from engine.game import Game, Action
 from engine.objects import color_indexing
 import numpy as np
 
@@ -41,53 +41,65 @@ class AutoTTR:
     '''
     This is the initializer for the AutoTTR model
     '''
-    def __init__(self, learningRate, momentum, weightDecay) -> None:
+    def __init__(self, learningRate, momentum, weightDecay, loadFrom: int = -1) -> None:
 
-        self.saves: int = 0
+        self.saves: int = None
 
-        # Residual Tower
-        inputLayer = keras.Input((1, 511,))
-        resTower_1 = keras.layers.Conv1D(256, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(inputLayer)
-        resTower_2 = keras.layers.BatchNormalization()(resTower_1)
-        resTower_3 = keras.layers.ReLU()(resTower_2)
+        if loadFrom == -1:
+            self.saves = 0
+        else:
+            self.saves = loadFrom + 1
+        self.model = None
 
-        resBlock_1 = keras.layers.Conv1D(256, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resTower_3)
-        resBlock_2 = keras.layers.BatchNormalization()(resBlock_1)
-        resBlock_3 = keras.layers.ReLU()(resBlock_2)
-        resBlock_4 = keras.layers.Conv1D(256, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_3)
-        resBlock_5 = keras.layers.BatchNormalization()(resBlock_4)
-        resBlock_6 = keras.layers.Add()([resTower_3, resBlock_5])
-        resBlock_7 = keras.layers.ReLU()(resBlock_6)
+        if loadFrom == -1:
+ 
+            # Residual Tower
+            inputLayer = keras.Input((1, 511,))
+            resTower_1 = keras.layers.Conv1D(256, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(inputLayer)
+            resTower_2 = keras.layers.BatchNormalization()(resTower_1)
+            resTower_3 = keras.layers.ReLU()(resTower_2)
 
-        # Output Heads
-        a_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
-        a_Out = keras.layers.BatchNormalization()(a_Out)
-        a_Out = keras.layers.ReLU()(a_Out)
-        a_Out = keras.layers.Dense(4, name="action", activation="softmax")(a_Out)
+            resBlock_1 = keras.layers.Conv1D(256, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resTower_3)
+            resBlock_2 = keras.layers.BatchNormalization()(resBlock_1)
+            resBlock_3 = keras.layers.ReLU()(resBlock_2)
+            resBlock_4 = keras.layers.Conv1D(256, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_3)
+            resBlock_5 = keras.layers.BatchNormalization()(resBlock_4)
+            resBlock_6 = keras.layers.Add()([resTower_3, resBlock_5])
+            resBlock_7 = keras.layers.ReLU()(resBlock_6)
 
-        Dc_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
-        Dc_Out = keras.layers.BatchNormalization()(Dc_Out)
-        Dc_Out = keras.layers.ReLU()(Dc_Out)
-        Dc_Out = keras.layers.Dense(9, name="colordesire")(Dc_Out)
+            # Output Heads
+            a_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
+            a_Out = keras.layers.BatchNormalization()(a_Out)
+            a_Out = keras.layers.ReLU()(a_Out)
+            a_Out = keras.layers.Dense(4, name="action", activation="softmax")(a_Out)
 
-        Dd_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
-        Dd_Out = keras.layers.BatchNormalization()(Dd_Out)
-        Dd_Out = keras.layers.ReLU()(Dd_Out)
-        Dd_Out = keras.layers.Dense(3, name="destinationdesire", activation="softmax")(Dd_Out)
+            Dc_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
+            Dc_Out = keras.layers.BatchNormalization()(Dc_Out)
+            Dc_Out = keras.layers.ReLU()(Dc_Out)
+            Dc_Out = keras.layers.Dense(9, name="colordesire")(Dc_Out)
 
-        Dr_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
-        Dr_Out = keras.layers.BatchNormalization()(Dr_Out)
-        Dr_Out = keras.layers.ReLU()(Dd_Out)
-        Dr_Out = keras.layers.Dense(100, name="routedesire", activation="softmax")(Dr_Out)
+            Dd_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
+            Dd_Out = keras.layers.BatchNormalization()(Dd_Out)
+            Dd_Out = keras.layers.ReLU()(Dd_Out)
+            Dd_Out = keras.layers.Dense(3, name="destinationdesire", activation="softmax")(Dd_Out)
 
-        w = keras.layers.Conv1D(1, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
-        w = keras.layers.BatchNormalization()(w)
-        w = keras.layers.ReLU()(w)
-        w = keras.layers.Dense(256)(w)
-        w = keras.layers.ReLU()(w)
-        w = keras.layers.Dense(1, name="value", activation=keras.activations.tanh)(w)
+            Dr_Out = keras.layers.Conv1D(2, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
+            Dr_Out = keras.layers.BatchNormalization()(Dr_Out)
+            Dr_Out = keras.layers.ReLU()(Dd_Out)
+            Dr_Out = keras.layers.Dense(100, name="routedesire", activation="softmax")(Dr_Out)
 
-        self.model = keras.Model(inputs=inputLayer, outputs=[a_Out, Dc_Out, Dd_Out, Dr_Out, w])
+            w = keras.layers.Conv1D(1, 1, kernel_regularizer=keras.regularizers.l2(weightDecay))(resBlock_7)
+            w = keras.layers.BatchNormalization()(w)
+            w = keras.layers.ReLU()(w)
+            w = keras.layers.Dense(256)(w)
+            w = keras.layers.ReLU()(w)
+            w = keras.layers.Dense(1, name="value", activation=keras.activations.tanh)(w)
+
+            self.model = keras.Model(inputs=inputLayer, outputs=[a_Out, Dc_Out, Dd_Out, Dr_Out, w])
+        
+        else:
+
+            self.model = keras.models.load_model(f"saved/model{loadFrom}.keras")
 
         losses = {
             "action": keras.losses.BinaryCrossentropy(),

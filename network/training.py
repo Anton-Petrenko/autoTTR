@@ -144,7 +144,8 @@ class NetworkTrainer:
                  networkSaveInterval: int = 1, 
                  trainingSteps: int = 1, 
                  batchSize: int = 1,
-                 weightDecay: int = 0.0001) -> None:
+                 weightDecay: int = 0.0001,
+                 loadFrom: int = -1) -> None:
         '''
         Set up the training object (default values used are from AlphaZero)
 
@@ -155,7 +156,7 @@ class NetworkTrainer:
         # Network to train
         if self.logs:
             print("[NetworkTrainer] Creating a new model...")
-        self.network = AutoTTR(learningRate, momentum, weightDecay)
+        self.network = AutoTTR(learningRate, momentum, weightDecay, loadFrom)
         """The latest network to use - in AlphaGoZero, this is fluid and done in parallel"""
         
         # Storage
@@ -193,7 +194,8 @@ class NetworkTrainer:
         meaning it is done sequentially.
         """
         steps = 1
-        for i in range(self.trainingSteps):
+        while True:
+        #for i in range(self.trainingSteps):
             
             for _ in range(self.gameSimsPerBatch):
                 game = self.playGame()
@@ -244,12 +246,13 @@ class NetworkTrainer:
                 newPlayer = Player(f"Player{i}")
                 players.append(newPlayer)
 
-        game = Game(players, logs=True)
+        game = Game(players, logs=False)
 
         print("simulating new game...")
         while not game.gameIsOver:
             action, root = self.mcts(game)
-            game.play(action)
+            if action != None:
+                game.play(action)
             self.storeSearchStats(game, root)
         return game
 
@@ -413,3 +416,33 @@ class NetworkTrainer:
         if len(self.gamesPlayed) > self.windowSize:
             self.gamesPlayed.pop(0)
         self.gamesPlayed.append(game)
+
+def getLogitMoveExternal(output: NetworkOutput, action: Action) -> float:
+        """
+        Takes a whole network output and an Action and returns a single float that represents the probability of the model selecting that move
+        """
+        a_p = output.a[action.action]
+        Dc_p = 1
+        Dd_p = 1
+        Dr_p = 1
+
+        if action.action == 0:
+            for color in action.colorsUsed:
+                Dc_p *= output.Dc[color_indexing[color]]
+            Dr_p = output.Dr[action.route.id]
+            return a_p * Dc_p * Dr_p
+        
+        elif action.action == 1:
+            Dc_p = output.Dc[color_indexing[action.colorToDraw]]
+            return a_p * Dc_p
+        
+        elif action.action == 2:
+            return a_p
+        
+        elif action.action == 3:
+            if action.askingForDeal: 
+                return a_p
+            else:
+                for indexToTake in action.takeDests:
+                    Dd_p *= output.Dd[indexToTake]
+                return a_p * Dd_p
