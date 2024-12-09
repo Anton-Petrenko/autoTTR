@@ -7,6 +7,7 @@ Game engine is located here
 import re, sys
 import networkx as nx
 import matplotlib.pyplot
+from random import Random, randint
 from copy import deepcopy
 from itertools import combinations
 from engine.objects import Deck, Action, Player, Destination, Route, color_indexing, pointsByLength, graphColors
@@ -16,10 +17,14 @@ class Game:
     '''
     The game engine for Ticket to Ride in Python
     '''
-    def __init__(self, players: list[Player] = [], map: str = 'USA', logs: bool = False, visualize: bool = False, copy: bool = False, reshuffleLimit: int = 10) -> None:
+    def __init__(self, players: list[Player] = [], map: str = 'USA', logs: bool = False, visualize: bool = False, copy: bool = False, reshuffleLimit: int = 10, seed: int = None) -> None:
         '''
         Initialize a game of Ticket to Ride & deal destination card choices to each player
         '''
+
+        # Create random instance for this game object
+        self.seed = seed
+        if seed == None: self.seed = randint(0, 99999999)
 
         # Game variables
         self.turn = 0
@@ -76,7 +81,7 @@ class Game:
     def clone(self):
         """Creates an entirely new copy of the current game"""
         playersNew = deepcopy(self.players)
-        new = Game(playersNew, self.map, False, False, True, self.reshuffleLimit)
+        new = Game(playersNew, self.map, True, False, True, self.reshuffleLimit, seed=self.seed)
         new.turn = deepcopy(self.turn)
         new.lastRound = deepcopy(self.lastRound)
         new.firstRound = deepcopy(self.firstRound)
@@ -414,7 +419,7 @@ class Game:
         if len(self.trainCarDeck.cards) == 0 and len(self.discardPile.cards) > 0:
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + ["\n> SHUFFLING DISCARDS INTO FACE DOWN DECK\n"]
-            self.discardPile.shuffle()
+            self.discardPile.shuffle(self.seed)
             self.trainCarDeck = self.discardPile
             self.discardPile = Deck([])
 
@@ -428,7 +433,7 @@ class Game:
                 try:
                     self.faceUpCards.append(self.trainCarDeck.draw(1)[0])
                 except:
-                    self.discardPile.shuffle()
+                    self.discardPile.shuffle(self.seed)
                     self.trainCarDeck.insert(list(self.discardPile.cards))
                     self.discardPile = Deck([])
                     i -= 1
@@ -436,7 +441,7 @@ class Game:
         elif len(self.faceUpCards) < 5 and len(self.discardPile.cards) > 0:
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + ["\n> SHUFFLING DISCARDS BACK INTO PLAY\n"]
-            self.discardPile.shuffle()
+            self.discardPile.shuffle(self.seed)
             while len(self.faceUpCards) < 5 and len(self.discardPile.cards) > 0:
                 self.faceUpCards.append(self.discardPile.draw(1)[0])
 
@@ -446,6 +451,8 @@ class Game:
         """
         if self.lastAction == None:
 
+            if action.colorToDraw not in self.faceUpCards:
+                print(f"Attempted to remove {action.colorToDraw} from {self.faceUpCards}")
             self.faceUpCards.remove(action.colorToDraw)
             if len(self.trainCarDeck.cards) > 0:
                 replacementCard = self.trainCarDeck.draw(1)

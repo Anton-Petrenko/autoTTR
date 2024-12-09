@@ -111,7 +111,10 @@ class Node:
         self.children: dict[Action, Node] = {}  
         self.toPlay: int = None
         self.terminal = False
-    
+
+    def __str__(self):
+        return f"NODE // visits: {self.visits} winprob: {self.totalWinProb} prior: {self.priorProb} children: {len(self.children)} toPlay: {self.toPlay} terminal: {self.terminal}"
+
     def isExpanded(self) -> bool:
         """
         Returns true if a node has been expanded already (has children)
@@ -132,7 +135,8 @@ class NetworkTrainer:
                  map: str = "USA", 
                  numPlayers: int | None = None, 
                  gameSimsPerBatch: int = 1, 
-                 mctsSimsPerMove: int = 1, logs: bool = False, 
+                 mctsSimsPerMove: int = 1, 
+                 logs: bool = False, 
                  rootDirichletAlpha: float = 0.2, 
                  rootExploreFraction: float = 0.25, 
                  pb_cBase: float = 19652, 
@@ -246,10 +250,11 @@ class NetworkTrainer:
                 newPlayer = Player(f"Player{i}")
                 players.append(newPlayer)
 
-        game = Game(players, logs=False)
+        game = Game(players, logs=True)
 
         print("simulating new game...")
         while not game.gameIsOver:
+            print(f"\t{game.turn}")
             action, root = self.mcts(game)
             if action != None:
                 game.play(action)
@@ -273,7 +278,18 @@ class NetworkTrainer:
 
             while node.isExpanded():
                 action, node = self.selectChild(node)
-                gameClone.play(action)
+                try:
+                    gameClone.play(action)
+                except:
+                    # DO NOT FORGET TO DISABLE LOGS FOR game AND gameClone AFTER DELETING THIS CODE!!
+                    print("Printing log of parent game to parent_log.txt")
+                    game.log("parent_log.txt")
+                    print("Printing log of game that caused error to error_log.txt")
+                    gameClone.log("error_log.txt")
+                    print("Printing path of the node")
+                    for thing in path:
+                        print(thing)
+                    quit()
                 path.append(node)
             
             value = self.evaluate(node, gameClone)

@@ -99,7 +99,7 @@ class AutoTTR:
         
         else:
 
-            self.model = keras.models.load_model(f"saved/model{loadFrom}.keras")
+            self.model = keras.models.load_model(f"latest.keras")
 
         losses = {
             "action": keras.losses.BinaryCrossentropy(),
@@ -135,4 +135,5 @@ class AutoTTR:
     
     def save(self):
         self.model.save(f"saved/model{self.saves}.keras")
+        self.model.save(f"latest.keras")
         self.saves += 1

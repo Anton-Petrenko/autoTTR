@@ -4,7 +4,7 @@ objects.py
 All objects required to simulate a game of ticket to ride is stored here for use in game.py
 '''
 
-from random import shuffle
+from random import Random, randint
 from collections import deque
 
 class Route:
@@ -21,8 +21,11 @@ class Route:
 
 class Deck:
 
-    def __init__(self, items: list = []) -> None:
-        shuffle(items)
+    def __init__(self, items: list = [], seed: int = None) -> None:
+        if seed == None:
+            seed = randint(0, 99999999)
+        self.rand = Random(seed)
+        self.rand.shuffle(items)
         self.cards = deque(items)
         
     def __str__(self) -> str:
@@ -34,12 +37,12 @@ class Deck:
                 strings.append(str(card))
             return '\n'.join(strings)
     
-    def shuffle(self) -> None:
+    def shuffle(self, seed) -> None:
         """Shuffle the deck in place"""
         if len(self.cards) == 0:
             return
         shuffled = list(self.cards)
-        shuffle(shuffled)
+        self.rand.shuffle(shuffled)
         self.cards = deque(shuffled)
     
     def draw(self, num: int) -> list:
