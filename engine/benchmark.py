@@ -17,6 +17,8 @@ class Benchmark:
         gameSizes > num of players in each game simulation
 
         players > pool of players to choose from by number where positive integer is a network save number in saved folder & -1 is a random opponent
+
+        A game with only 4 players with 1 minGamePerPlayer will result in one simulated game whose logs will be recorded
         """
         
         gamesNeeded = len(players) * minGamesPerPlayer // 4
@@ -36,7 +38,12 @@ class Benchmark:
             if all(self.gamesCount[player] < minGamesPerPlayer for player in playersList):
                 print(f"Running {playersList}...")
                 playing = [Player(f"benchmark{playersList[0]}"), Player(f"benchmark{playersList[1]}"), Player(f"benchmark{playersList[2]}"), Player(f"benchmark{playersList[3]}")]
-                game = Game(playing, "USA", False, False, False)
+                
+                game = None
+                if len(players) == 4 and minGamesPerPlayer == 1:
+                    game = Game(playing, "USA", True, False, False)
+                else:
+                    game = Game(playing, "USA", False, False, False)
 
                 while not game.gameIsOver:
                     if game.turn % 25 == 0:

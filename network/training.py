@@ -5,6 +5,7 @@ The file at top-level that will train the network, MCTS
 '''
 
 import math
+from copy import deepcopy
 from numpy import random as nprand
 from numpy import ndarray
 import numpy as np
@@ -215,6 +216,7 @@ class NetworkTrainer:
                 steps += 1
 
     def updateWeights(self, batch: list[Datapoint]):
+        print("Updating model weights...")
         for data in batch:
             label = {
                 "action": data.label_a.reshape((1, 1, 4)),
@@ -281,15 +283,15 @@ class NetworkTrainer:
                 try:
                     gameClone.play(action)
                 except:
-                    # DO NOT FORGET TO DISABLE LOGS FOR game AND gameClone AFTER DELETING THIS CODE!!
-                    print("Printing log of parent game to parent_log.txt")
-                    game.log("parent_log.txt")
-                    print("Printing log of game that caused error to error_log.txt")
-                    gameClone.log("error_log.txt")
-                    print("Printing path of the node")
                     for thing in path:
                         print(thing)
-                    quit()
+                        for child in thing.children.keys():
+                            print(f'\t{child}')
+                    print("Printing logs")
+                    gameClone.log("error_log.txt")
+                    game.log("parent_log.txt")
+                    gameClone.play(action)
+
                 path.append(node)
             
             value = self.evaluate(node, gameClone)

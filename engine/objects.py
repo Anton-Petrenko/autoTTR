@@ -65,7 +65,7 @@ class Action:
     """
     The object representing an action (to) take/taken in the game
     """
-    def __init__(self, action: int, route: Route = None, colorsUsed: list[str] = None, colorToDraw: str = None, askingForDeal: bool = None, takeDests: list[int] = None) -> None:
+    def __init__(self, action: int, route: Route = None, colorsUsed: list[str] = None, colorToDraw: str = None, askingForDeal: bool = None, takeDests: list[int] = None, faceUpCards = None) -> None:
         """
         Create an action object\n
         @parameters\n
@@ -96,19 +96,22 @@ class Action:
                 assert takeDests != None, "Action object: indicated that destinations have been dealt but no takeDest of indexes is supplied"
                 assert type(takeDests) == list, "Action object: takeDests not supplied correctly, must be list of indexes"
                 self.takeDests = takeDests
+        self.faceUpCards: list[str] = faceUpCards
+        assert self.faceUpCards != None
+        """A list of the face up cards BEFORE the action described in this object was taken"""
     
     def __str__(self) -> str:
         if self.action == 0:
-            return f"{self.route} using {self.colorsUsed}"
+            return f"({self.faceUpCards}) {self.route} using {self.colorsUsed}"
         elif self.action == 1:
-            return f"{self.colorToDraw} (DRAW FACE UP)"
+            return f"({self.faceUpCards}) {self.colorToDraw} (DRAW FACE UP)"
         elif self.action == 2:
-            return f"(DRAW FACE DOWN)"
+            return f"({self.faceUpCards}) (DRAW FACE DOWN)"
         elif self.action == 3:
             if self.askingForDeal:
-                return f"(ASK FOR DEST DEAL)"
+                return f"({self.faceUpCards}) (ASK FOR DEST DEAL)"
             else:
-                return f"{self.takeDests} (TAKE DESTS)"
+                return f"({self.faceUpCards}) {self.takeDests} (TAKE DESTS)"
     
     def __hash__(self):
         value = str(self.action)
@@ -138,27 +141,34 @@ class Action:
             if self.colorsUsed != value.colorsUsed:
                 return False
             #print(f"Action 0 equal! {self} == {value}")
-            return True
+            return self.checkFaceUps(value)
         elif self.action == 1 and value.action == 1:
             if self.colorToDraw != value.colorToDraw:
                 return False
             #print(f"Action 1 equal! {self} == {value}")
-            return True
+            return self.checkFaceUps(value)
         elif self.action == 2 and value.action == 2:
             #print(f"Action 2 equal! {self} == {value}")
-            return True
+            return self.checkFaceUps(value)
         elif self.action == 3 and value.action == 3:
             if self.askingForDeal == True and value.askingForDeal == True:
-                return True
+                return self.checkFaceUps(value)
             if self.askingForDeal == False and value.askingForDeal == False:
                 if self.takeDests != value.takeDests:
                     return False
                 #print(f"Action 3 equal! {self} == {value}")
-                return True
+                return self.checkFaceUps(value)
             else:
                 return False
         else:
             TypeError(f"Action equality function reached an unspecified state when given actions {self} and {value}")
+        
+    def checkFaceUps(self, value):
+        for color in value.faceUpCards:
+            if self.faceUpCards.count(color) == value.faceUpCards.count(color):
+                return True
+            else:
+                return False
 
 
 class Player:
@@ -172,14 +182,14 @@ class Player:
         self.trainCardHand: list[str] = []
         self.destinationCardHand: list[Destination] = []
         self.colorCounts: list[list[str]] = [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+        """The known cards for each other player in the game (each color its own index, each index represents the turn order of that player)"""
         self.gotLongestRoute: bool = False
-        """The known cards for each other player in the game (each color its own index)"""
 
     def __str__(self) -> str:
         destString = []
         for x in self.destinationCardHand:
             destString.append(str(x))
-        return f"(PLAYER {self.turnOrder}) {self.name}: {self.points} points, {self.trainsLeft} trains left\nDESTS: [{', '.join(destString)}]\nCOLRS: {self.trainCardHand}"
+        return f"(PLAYER {self.turnOrder}) {self.name}: {self.points} points, {self.trainsLeft} trains left\nDESTS: [{', '.join(destString)}]\nCOLRS: {self.trainCardHand}\nCOLCNT: {self.colorCounts}"
 
     
 

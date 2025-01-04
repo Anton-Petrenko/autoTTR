@@ -134,6 +134,7 @@ class AutoTTR:
         return NetworkOutput(outputs[0][0], outputs[1][0], outputs[2][0], outputs[3][0], outputs[4][0])
     
     def save(self):
+        print(f"Saving model {self.saves}")
         self.model.save(f"saved/model{self.saves}.keras")
         self.model.save(f"latest.keras")
         self.saves += 1

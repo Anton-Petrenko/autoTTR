@@ -158,7 +158,7 @@ class Game:
             for y in range(2, x+1):
                 for z in combinations(helper, y):
                     take = list(z)
-                    validMoves.append(Action(3, askingForDeal=False, takeDests=take))
+                    validMoves.append(Action(3, askingForDeal=False, takeDests=take, faceUpCards=self.faceUpCards))
 
         elif self.lastAction == None:
 
@@ -197,11 +197,11 @@ class Game:
                 #if route.city1 == "RALEIGH" and route.city2 == "ATLANTA":
                     #print(f"\n{route}")
                 if numWilds >= weight:
-                    validMoves.append(Action(0, route, ['WILD']))
+                    validMoves.append(Action(0, route, ['WILD'], faceUpCards=self.faceUpCards))
                 
                 # Handle [COLOR]
                 if self.players[nextPlayer].trainCardHand.count(color) >= weight:
-                    validMoves.append(Action(0, route, [color]))
+                    validMoves.append(Action(0, route, [color], faceUpCards=self.faceUpCards))
                 
                 if color == "GRAY":
                     for loopColor in color_indexing.keys():
@@ -210,41 +210,45 @@ class Game:
                             continue
 
                         numLoopColor = self.players[nextPlayer].trainCardHand.count(loopColor)
+                        if numLoopColor == 0:
+                            continue
                         if numLoopColor + numWilds < weight:
                             continue
                         if numLoopColor >= weight:
-                            validMoves.append(Action(0, route, [loopColor]))                       
-                        if 0 < numLoopColor < weight and numLoopColor + numWilds > weight:
-                            validMoves.append(Action(0, route, [loopColor, 'WILD']))                       
+                            validMoves.append(Action(0, route, [loopColor], faceUpCards=self.faceUpCards))                       
+                        if 0 < numLoopColor < weight and numLoopColor + numWilds > weight and numWilds > 0:
+                            validMoves.append(Action(0, route, [loopColor, 'WILD'], faceUpCards=self.faceUpCards))                       
                         if 0 < numWilds < weight and numWilds + numLoopColor > weight:
-                            validMoves.append(Action(0, route, ['WILD', loopColor]))                       
+                            validMoves.append(Action(0, route, ['WILD', loopColor], faceUpCards=self.faceUpCards))                       
                         if numWilds + numLoopColor == weight and numWilds > 0:
-                            validMoves.append(Action(0, route, [loopColor, 'WILD']))
+                            validMoves.append(Action(0, route, [loopColor, 'WILD'], faceUpCards=self.faceUpCards))
                 
                 else:
 
                     numColor = self.players[nextPlayer].trainCardHand.count(color)
+                    if numColor == 0:
+                            continue
                     if numColor + numWilds < weight:
                         continue
                     if numColor >= weight:
-                        validMoves.append(Action(0, route, [color]))                   
-                    if 0 < numColor < weight and numColor + numWilds > weight:
-                        validMoves.append(Action(0, route, [color, 'WILD']))                        
+                        validMoves.append(Action(0, route, [color], faceUpCards=self.faceUpCards))                   
+                    if 0 < numColor < weight and numColor + numWilds > weight and numWilds > 0:
+                        validMoves.append(Action(0, route, [color, 'WILD'], faceUpCards=self.faceUpCards))
                     if 0 < numWilds < weight and numWilds + numColor > weight:
-                        validMoves.append(Action(0, route, ['WILD', color]))                        
-                    if numWilds + numColor == weight:
-                        validMoves.append(Action(0, route, [color, 'WILD']))
+                        validMoves.append(Action(0, route, ['WILD', color], faceUpCards=self.faceUpCards))                        
+                    if numWilds + numColor == weight and numWilds > 0:
+                        validMoves.append(Action(0, route, [color, 'WILD'], faceUpCards=self.faceUpCards))
 
             if len(self.faceUpCards) > 0:
 
                 for card in self.faceUpCards:
-                    validMoves.append(Action(1, colorToDraw=card))
+                    validMoves.append(Action(1, colorToDraw=card, faceUpCards=self.faceUpCards))
             
             if len(self.trainCarDeck.cards) > 0:
-                validMoves.append(Action(2))
+                validMoves.append(Action(2, faceUpCards=self.faceUpCards))
             
             if len(self.destinationsDeck.cards) > 0:
-                validMoves.append(Action(3, askingForDeal=True))
+                validMoves.append(Action(3, askingForDeal=True, faceUpCards=self.faceUpCards))
 
             #print()
 
@@ -252,10 +256,10 @@ class Game:
 
             for card in self.faceUpCards:
                 if card != 'WILD':
-                    validMoves.append(Action(1, colorToDraw=card))
+                    validMoves.append(Action(1, colorToDraw=card, faceUpCards=self.faceUpCards))
 
             if len(self.trainCarDeck.cards) > 0:
-                validMoves.append(Action(2))
+                validMoves.append(Action(2, faceUpCards=self.faceUpCards))
         
         elif self.lastAction.action == 3:
 
@@ -264,7 +268,7 @@ class Game:
             for y in range(1, x+1):
                 for z in combinations(helper, y):
                     take = list(z)
-                    validMoves.append(Action(3, askingForDeal=False, takeDests=take))
+                    validMoves.append(Action(3, askingForDeal=False, takeDests=take, faceUpCards=self.faceUpCards))
         if len(validMoves) == 0:
             self.noValidMovesInARow += 1
             if self.recordLogs:
@@ -379,6 +383,7 @@ class Game:
         self.turn += 1
         
         self.destinationsDeck.insert(self.destinationCardsDealt)
+        self.destinationCardsDealt = []
 
     def dealDestinations(self, action: Action) -> None:
         """
@@ -399,18 +404,22 @@ class Game:
         The function for changing the game state to reflect a take of a face down card
         """
         drawn = self.trainCarDeck.draw(1)[0]
+
         self.players[self.turn % len(self.players)].trainCardHand.append(drawn)
+
+        # We must take factor it to everyone's color count
+        currentTurnOrder = self.turn % len(self.players)
+        for player in self.players:
+            player.colorCounts[currentTurnOrder][9] += 1
 
         if self.recordLogs:
             self.gameLogs = self.gameLogs + [f"> picking face down\n> it's a {drawn}!\n"]
-
-        
         
         if self.lastAction != None:
-            self.lastAction = None
-            self.turn += 1
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + [f"\n{self.players[self.turn % len(self.players)]}\n\n"]
+            self.lastAction = None
+            self.turn += 1
         else:
             self.lastAction = action
     
@@ -457,7 +466,13 @@ class Game:
             if len(self.trainCarDeck.cards) > 0:
                 replacementCard = self.trainCarDeck.draw(1)
                 self.faceUpCards.append(replacementCard[0])
+
             self.players[self.turn % len(self.players)].trainCardHand.append(action.colorToDraw)
+
+            # We must take add it to everyone's color count
+            currentTurnOrder = self.turn % len(self.players)
+            for player in self.players:
+                player.colorCounts[currentTurnOrder][color_indexing[action.colorToDraw]] += 1
 
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + [f"> pick up {action.colorToDraw}\n"]
@@ -480,6 +495,10 @@ class Game:
                 replacement = self.trainCarDeck.draw(1)
                 self.faceUpCards.append(replacement[0])
             self.players[self.turn % len(self.players)].trainCardHand.append(action.colorToDraw)
+
+            currentTurnOrder = self.turn % len(self.players)
+            for player in self.players:
+                player.colorCounts[currentTurnOrder][color_indexing[action.colorToDraw]] += 1
 
             if self.recordLogs:
                 self.gameLogs = self.gameLogs + [f"> pick up {action.colorToDraw}\n"]
@@ -531,10 +550,27 @@ class Game:
         self.players[self.turn % len(self.players)].trainsLeft -= weight
         self.players[self.turn % len(self.players)].points += pointsByLength[weight]
         assert self.players[self.turn % len(self.players)].trainsLeft >= 0
+
+        # Do color counting
+        currentTurnOrder = self.turn % len(self.players)
+        for color in using:
+            # For each color we used, we must take it away from everyone's color count
+            for player in self.players:
+                if player.colorCounts[currentTurnOrder][color_indexing[color]] == 0:
+                    player.colorCounts[currentTurnOrder][9] -= 1
+                else:
+                    player.colorCounts[currentTurnOrder][color_indexing[color]] -= 1
         
         if self.recordLogs:
             self.gameLogs = self.gameLogs + [f"> placed {city1} --{weight}-- {city2} {openPath} using {using}\n"]
             self.gameLogs = self.gameLogs + [f"\n{self.players[self.turn % len(self.players)]}\n\n"]
+        
+        try:
+            assert all(nums >= 0 for nums in player.colorCounts[currentTurnOrder])
+        except:
+            self.log()
+            print(f"Negative values in color counts trying to process action {city1} to {city2} with {colorsUsed}... game has been logged... process stopped")
+            quit()
 
         self.discardPile.insert(using)
         if self.players[self.turn % len(self.players)].trainsLeft < 3:
