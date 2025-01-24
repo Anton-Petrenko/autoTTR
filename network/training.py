@@ -16,6 +16,7 @@ import tensorflow as tf
 from engine.game import Game
 from engine.objects import Player, Action, color_indexing, actionsAreEqual
 from network.network import AutoTTR, NetworkOutput
+from network.mcts import FlatMonteCarlo
 from random import randint, choices
 
 class Datapoint:
@@ -165,7 +166,7 @@ class NetworkTrainer:
         """The latest network to use - in AlphaGoZero, this is fluid and done in parallel"""
         
         # Storage
-        self.windowSize = windowSize
+        self.windowSize = gameSimsPerBatch
         self.networks = []
         self.gamesPlayed: list[Game] = []
 
@@ -231,7 +232,7 @@ class NetworkTrainer:
         totalMoves = sum([len(game.history) for game in self.gamesPlayed])
         gamesForTraining: ndarray = nprand.choice(
             self.gamesPlayed, 
-            size=self.batchSize, 
+            size=self.batchSize,
             p=[len(game.history) / totalMoves for game in self.gamesPlayed])
         gamePos = [(game, nprand.randint(len(game.history))) for game in gamesForTraining]
         return [Datapoint(game, index) for (game, index) in gamePos]
@@ -257,10 +258,11 @@ class NetworkTrainer:
         print("simulating new game...")
         while not game.gameIsOver:
             print(f"\t{game.turn}")
-            action, root = self.mcts(game)
+            # action, root = self.mcts(game)
+            action = FlatMonteCarlo(game, 2).search()
             if action != None:
                 game.play(action)
-            self.storeSearchStats(game, root)
+            # self.storeSearchStats(game, root)
         return game
 
     def storeSearchStats(self, game: Game, root: Node) -> None:

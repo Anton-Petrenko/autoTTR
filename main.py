@@ -16,10 +16,10 @@ All scripting should be done here
 # NOTE: Up until save 255, the model was doing one MCTS simulation per move, this was changed to 100, and network save interval was changed to 5
 
 
+if __name__ == "__main__":
+    from network.training import NetworkTrainer
+    trainer = NetworkTrainer(numPlayers=4, logs=False, gameSimsPerBatch=2, batchSize=50, trainingSteps=10, networkSaveInterval=5, loadFrom=263, mctsSimsPerMove=100)
+    trainer.run()
 
-from network.training import NetworkTrainer
-trainer = NetworkTrainer(numPlayers=4, logs=False, gameSimsPerBatch=2, batchSize=50, trainingSteps=10, networkSaveInterval=5, loadFrom=262, mctsSimsPerMove=100)
-trainer.run()
-
-# from engine.benchmark import Benchmark
-# Benchmark(4, [256, 259, 262, -1], 5)
+    # from engine.benchmark import Benchmark
+    # Benchmark(4, [256, 259, 262, -1], 5)
