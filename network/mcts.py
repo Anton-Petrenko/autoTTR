@@ -2,6 +2,7 @@ import time
 import os
 import multiprocessing
 from random import choice
+from typing import Literal
 from engine.game import *
 
 class Node:
@@ -14,8 +15,10 @@ class FlatMonteCarlo:
     The class encompassing FlatMonteCarlo search given a game state
     """
 
-    def __init__(self, game: Game, seconds_per_branch: int):
+    def __init__(self, game: Game, seconds_per_branch: int, end_goal: Literal['wins', 'points']):
+        assert end_goal in ['wins', 'points']
         self.game = game
+        self.end_goal = end_goal
         self.seconds_per_branch = seconds_per_branch
 
     def simulate(self, action: Action) -> tuple[int, int]:
@@ -48,8 +51,13 @@ class FlatMonteCarlo:
             
             total_simulations += 1
 
-            if game_clone.finalStandings[0].turnOrder == player_id:
-                wins += 1
+            if self.end_goal == 'points':
+                wins += game_clone.players[player_id].points
+            elif self.end_goal == 'wins':
+                if game_clone.finalStandings[0].turnOrder == player_id:
+                    wins += 1
+            else:
+                raise ValueError("Value error in simulate within flatmontecarlo")
         
         # print(f"{os.getpid()} Flat MCTS Simulation ran {total_simulations} times for given action.")
         return wins, total_simulations
@@ -68,14 +76,17 @@ class FlatMonteCarlo:
         # print(f"{os.getpid()} Starting parallel processes...")
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             results = pool.map(self.simulate, actions)
-
-        max_ratio = -1
+        print(results)
+        max_ratio = None
         best_action = None
         total_simulations = sum([x[1] for x in results])
         # print(f"{os.getpid()} Flat MCTS ran {total_simulations} times after all processes finished.")
         for _action, wins in list(zip(actions, [x[0] for x in results])):
             ratio = wins / total_simulations
-            if wins / total_simulations > max_ratio:
+            if max_ratio == None:
+                max_ratio = ratio
+                best_action = _action
+            elif wins / total_simulations > max_ratio:
                 max_ratio = ratio
                 best_action = _action
 

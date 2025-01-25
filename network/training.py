@@ -205,6 +205,8 @@ class NetworkTrainer:
             
             for _ in range(self.gameSimsPerBatch):
                 game = self.playGame()
+                for person in game.finalStandings:
+                    print(person.name, person.points)
                 self.saveGame(game)
             
             batch = self.sampleBatch() # Create data to train on
@@ -259,7 +261,7 @@ class NetworkTrainer:
         while not game.gameIsOver:
             print(f"\t{game.turn}")
             # action, root = self.mcts(game)
-            action = FlatMonteCarlo(game, 2).search()
+            action = FlatMonteCarlo(game, 2, 'points').search()
             if action != None:
                 game.play(action)
             # self.storeSearchStats(game, root)
