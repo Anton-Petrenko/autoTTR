@@ -17,9 +17,22 @@ All scripting should be done here
 
 
 if __name__ == "__main__":
-    from network.training import NetworkTrainer
-    trainer = NetworkTrainer(numPlayers=4, logs=False, gameSimsPerBatch=2, batchSize=50, trainingSteps=10, networkSaveInterval=5, loadFrom=263, mctsSimsPerMove=100)
-    trainer.run()
+    # from network.training import NetworkTrainer
+    # trainer = NetworkTrainer(numPlayers=4, logs=False, gameSimsPerBatch=2, batchSize=50, trainingSteps=10, networkSaveInterval=5, loadFrom=263, mctsSimsPerMove=100)
+    # trainer.run()
 
     # from engine.benchmark import Benchmark
     # Benchmark(4, [256, 259, 262, -1], 5)
+
+    from engine.game import Player, Game
+    from agents.ds_hungry import HungryAgent
+    players = [Player("0"), Player("1"), Player("2"), Player("3")]
+    game = Game(players)
+    hungry = HungryAgent()
+    while not game.gameIsOver:
+        print(game.turn)
+        decision = hungry.decide(game)
+        if decision == None:
+            print("Returned none for some reason... quitting")
+            quit()
+        game.play(decision)
