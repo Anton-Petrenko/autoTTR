@@ -37,8 +37,8 @@ class HungryAgent:
             best_move = None
             min_points = None
             for m in possible_moves:
-                destinations = list(list_of_cities)
                 temp = []
+                destinations = list(list_of_cities)
                 points = d_points
                 for d in game.destinationCardsDealt:
                     points += d.points
