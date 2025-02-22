@@ -26,13 +26,16 @@ if __name__ == "__main__":
 
     from engine.game import Player, Game
     from agents.ds_hungry import HungryAgent
-    players = [Player("0"), Player("1"), Player("2"), Player("3")]
-    game = Game(players)
-    hungry = HungryAgent()
+    from agents.ds_longroutejunkie import LongRouteJunkie
+    players = [Player("Spongebob"), Player("Patrick"), Player("Squidward"), Player("Sandy")]
+    game = Game(players, logs=True, visualize=True)
+    hungry = LongRouteJunkie()
     while not game.gameIsOver:
         print(game.turn)
         decision = hungry.decide(game)
         if decision == None:
-            print("Returned none for some reason... quitting")
-            quit()
+            continue
         game.play(decision)
+    # print(hungry.routes_by_color)
+    # print(hungry.colors_needed)
+    game.draw()

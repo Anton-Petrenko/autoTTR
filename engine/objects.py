@@ -244,6 +244,6 @@ color_indexing: dict[str, int] = {'PINK': 0, 'WHITE': 1, 'BLUE': 2, 'YELLOW': 3,
 pointsByLength: dict[int, int] = {1:1, 2:2, 3:4, 4:7, 5:10, 6:15}
 """A dictionary that maps route length to the points gained for placing it"""
 
-graphColors: dict[int, str] = {0: 'blue', 1: 'red', 2: 'green', 3: 'yellow'}
+graphColors: dict[int, str] = {0: 'blue', 1: 'red', 2: 'green', 3: 'orange'}
 """A dictionary that maps a player turn order to the color denoting their routes on the graph drawn at the end of the game"""
 
